@@ -1,2 +1,7 @@
 codegraph/
 .claude-mem/
+__pycache__/
+.pytest_cache/
+dist/
+*.egg-info/
+.venv/
