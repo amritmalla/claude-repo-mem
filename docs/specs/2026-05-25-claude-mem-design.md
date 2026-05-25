@@ -14,7 +14,9 @@ A local-first MCP server plus companion Claude Code skills that give Claude dura
 
 ### 1.2 Load-bearing constraint
 
-**claude-mem must operate within a small active context budget.** Every design choice in this document is justified against that constraint. The default retrieval budget is **~3,000 tokens per query**. Anything larger is opt-in.
+**claude-mem must operate within a small active context budget — but the right optimization target is wall-clock latency and tool-call count, not raw token frugality.** Forcing Claude into many small tool calls to keep individual responses tiny is a worse outcome than one slightly larger call that finishes the job. Tools therefore get **per-tool budgets** sized to their question (§4 and §5), with the hot-path `recall` kept tight (3k) and traversal-class tools (`trace`, `plan_task`) given headroom because the alternative is grep loops.
+
+The principle stated positively: minimize *total tokens across the turn* and *turns per task*, not tokens-per-tool-call.
 
 ### 1.3 Job-to-be-done
 
@@ -78,7 +80,7 @@ The directory is partially git-tracked: `memory/`, `handoffs/`, and `scopes.yml`
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                      MCP Tool Surface                       │
-│  recall · expand · remember · forget · scopes · stats       │
+│  recall · trace · expand · remember · forget · scopes · stats│
 │  plan_task · tasks · handoff · resume                       │
 └──────────────────────────┬──────────────────────────────────┘
                            │
@@ -284,24 +286,54 @@ Claude retains `expand(handle, tier)` for cases where the auto-fill missed (e.g.
 
 ---
 
-## 5. MCP Tool Surface (10 tools)
+## 5. MCP Tool Surface (11 tools)
 
-All tools return structured JSON. All handles are opaque strings (`mem://...`, `code://...`, `doc://...`, `task://...`).
+All tools return structured JSON. All handles are opaque strings (`mem://...`, `code://...`, `doc://...`, `task://...`). Each tool has a **default budget** sized to its question (§1.2 rationale); callers can override per call.
 
-| Tool | Inputs | Returns |
-|---|---|---|
-| `recall` | `query`, `budget?`, `scopes?`, `layers?`, `include_superseded?` | Ranked T1 items + overflow handles |
-| `expand` | `handle`, `tier` ∈ `t2`\|`t0` | Unit content at the requested tier |
-| `remember` | `fact`, `scope`, `kind?`, `confidence?`, `supersedes?` | New memory handle |
-| `forget` | `handle` \| `query`+`scope` | Count of tombstoned units |
-| `scopes` | — | Known scopes with unit counts |
-| `stats` | — | Index size, last reindex, cache hit rate, layer counts |
-| `plan_task` | `intent`, `parent_id?`, `budget?` | Task tree with attached context bundles |
-| `tasks` | `filter?` (status, scope, recency) | List of task units |
-| `handoff` | `task_id?` (defaults to active) | Snapshot handle + markdown path |
-| `resume` | `task_id` | Hydrated bundle as if a `recall` response |
+| Tool | Inputs | Default budget | Returns |
+|---|---|---|---|
+| `recall` | `query`, `budget?`, `scopes?`, `layers?`, `include_superseded?` | 3k | Ranked items (tiered fill §4.2) + overflow handles |
+| `trace` | `seed_handle(s)`, `depth?` (default 2), `relations?`, `budget?` | 8k | Connected units with **full T0** inline, single call (§5.1) |
+| `expand` | `handle`, `tier` ∈ `t2`\|`t0` | unit-sized | One unit at the requested tier (long-tail drill-down) |
+| `remember` | `fact`, `scope`, `kind?`, `confidence?`, `supersedes?` | — | New memory handle |
+| `forget` | `handle` \| `query`+`scope` | — | Count of tombstoned units |
+| `scopes` | — | — | Known scopes with unit counts |
+| `stats` | — | — | Index size, last reindex, cache hit rate, layer counts |
+| `plan_task` | `intent`, `parent_id?`, `budget?` | 6k | Task tree with attached context bundles |
+| `tasks` | `filter?` (status, scope, recency) | — | List of task units |
+| `handoff` | `task_id?` (defaults to active) | — | Snapshot handle + markdown path |
+| `resume` | `task_id` | 4k | Hydrated bundle as if a `recall` response |
 
 The surface is small, single-purpose, and read/write-separated. Claude can be taught each tool in isolation via a companion skill.
+
+### 5.1 `trace` — traversal from a seed
+
+`recall` answers "what's relevant to this query." `trace` answers "starting from this handle, what's connected, and show me the code." Different question, different tool. Forces a single round-trip instead of N `expand` calls when Claude already knows the entry point.
+
+```
+Inputs:
+  seed_handle(s)    one or more handles (typically from a prior recall)
+  depth             max hops in the relation graph (default 2, cap 3)
+  relations         filter on relation kinds (e.g. ['implements','mentions',
+                    'route_to','handler_of']); default = all
+  budget            token cap (default 8k)
+
+Algorithm:
+  1. BFS from seeds in the relation graph, up to `depth` hops.
+  2. Rank discovered nodes by: (a) hop distance, (b) relation-kind weight,
+     (c) RRF-equivalent feature multipliers (recency, layer).
+  3. Run §4.2's tiered fill against the larger trace budget — top results
+     inline as T0, mid as T2, tail as T1. Same guardrails apply
+     (T0_SINGLE_CAP, TOP_PROMOTE).
+  4. Return units in graph order (DFS from seed), each tagged with the
+     relation kind that brought it in and its tier.
+
+Returns:
+  { seeds: [...], path: [{handle, tier, content, relation, hop_distance}],
+    overflow_handles, tier_histogram, budget_used }
+```
+
+The mental model: `recall` builds a fresh result set from a query; `trace` walks the graph from a known foothold and brings back the code. Both are budgeted, both are single-shot, both use the same tiered fill so behavior is consistent.
 
 ---
 
@@ -332,7 +364,11 @@ The expensive "understand the whole repo" cost is paid once. Each sub-task can b
 3. Returns a single structured response: `{ snapshot_markdown, hydrated_items, overflow_handles }`.
 4. New session starts at ~2–4k tokens of context, fully oriented.
 
-### 6.4 Why this matters for the budget thesis
+### 6.4 Design rationale — primary agent over subagents
+
+Prior art (codegraph and similar projects) finds that giving the primary agent enough context to *avoid* spawning exploration subagents is dramatically more efficient than designing for parallel sub-explorers. Subagents are slow, costly, and lose state on completion. claude-mem's task model is built around that finding: `plan_task` produces a tree the primary agent can either work directly or hand to a subagent *with a pre-sized bundle*, and `handoff`/`resume` lets a single primary agent sustain work across sessions without re-discovery. The architecture optimizes for "one agent, fully informed" before it optimizes for "many agents, coordinating."
+
+### 6.5 Why this matters for the budget thesis
 
 Without tasks, every session re-discovers context (large reads, large prompts, fast bloat). With tasks:
 
@@ -368,7 +404,29 @@ For each changed file F:
 
 T2 summary and embedding are computed asynchronously in a background worker — `recall` works on units with only T1 populated, just with weaker ranking.
 
-### 7.3 Parser registry
+### 7.3 Heuristic synthesizers — framework-aware edges
+
+Pure tree-sitter parsing produces nodes but not the edges Claude needs to follow flow. The classic failure modes are dynamic dispatch boundaries: web framework routes, event handlers, callbacks, hooks. Without bridging these, Claude falls back to repo-wide grep — the exact failure mode claude-mem exists to prevent.
+
+The compromise: not a full call graph (out of scope; would require type inference or a language server), but **targeted, per-framework synthesizers** that emit `relation` rows during indexing. Each synthesizer is a small focused module (~50–200 lines) that pattern-matches known framework conventions and records the edge it found. Synthesizers are intentionally heuristic — they don't try to be sound, they try to be useful enough that Claude doesn't reach for grep.
+
+V1 synthesizers (each gated by language/framework detection):
+
+| Synthesizer | Pattern | Relation emitted |
+|---|---|---|
+| `py.flask_routes` | `@app.route("/x")` / `@bp.route` decorators | `route_to` |
+| `py.fastapi_routes` | `@app.get/post/...("/x")` decorators | `route_to` |
+| `py.django_urls` | `urls.py` `path("x", view)` calls | `route_to` |
+| `js.express_routes` | `app.get/post(path, handler)` calls | `route_to` |
+| `js.react_hooks` | `useState`/`useReducer`/`useCallback` setter usage | `mutates_state_of` |
+| `js.react_custom_hooks` | `use*` function calls inside components | `consumed_by` |
+| `imports` (all langs) | static import/require statements | `imports` |
+
+Synthesizers run after tree-sitter parsing in the indexer, take parsed units as input, and emit `relation` rows. They are pure functions over already-extracted unit metadata — no LLM, no re-parsing. Failure of one synthesizer never blocks indexing; it just produces fewer edges.
+
+V1 acceptance bar: at least one route-style synthesizer per supported web framework, plus imports. Additional synthesizers (Spring `@RequestMapping`, Express middleware chains, Vue/Svelte reactivity) are added incrementally as language coverage grows in Phase 4.
+
+### 7.4 Parser registry
 
 - **Code:** tree-sitter via `tree-sitter-languages`. Unit kinds: `function`, `method`, `class`, `interface`, `module`. Languages: Python + JS/TS in Phase 1; Java, Go, Rust added in Phase 4.
 - **Docs:** markdown via `markdown-it-py` with frontmatter. Unit kinds: `section` (heading-bounded), `frontmatter`.
@@ -451,14 +509,27 @@ No required configuration to start. The file exists only if the user wants to ov
 
 ---
 
-## 11. Companion Skills (in `claude-full-stack-2.0`)
+## 11. Behavioral Steering
+
+Two complementary mechanisms shape how Claude actually uses claude-mem. Skills teach *how*; the MCP handshake teaches *when to trust*.
+
+### 11.1 MCP `initialize` instructions
+
+The MCP protocol's `serverInfo.instructions` field is shown to Claude on session handshake and meaningfully shapes which tools it reaches for. claude-mem ships a short, strongly-worded instruction block declaring its scope of authority. Approximate v1 text (subject to tuning):
+
+> **claude-mem is the authoritative source for this repo's code structure, documentation, and accumulated decisions.** Before reading files with native `Read`/`Grep`, call `recall(query)` — it returns ranked, summarized, scoped results within a budget. Before tracing related code (callers, handlers, hooks, routes), call `trace(seed_handle)` — it returns full source for connected nodes in one shot. Reach for native file tools only when claude-mem returns nothing useful, when working on files outside this repo, or when verifying a recent edit not yet reindexed. When you learn something durable (a decision, convention, or user preference), call `remember(fact, scope)`. For long or multi-part tasks, call `plan_task(intent)` before starting work.
+
+This is the contract: claude-mem promises to be the cheaper, faster path; Claude promises to try it first. The instruction text is versioned with the server binary and tuned based on observed fallback rates (visible in `stats()`).
+
+### 11.2 Companion Skills (in `claude-full-stack-2.0`)
 
 Four small skills, each a single markdown file under `skills/claude-mem/`:
 
 | Skill | Triggers on | Teaches |
 |---|---|---|
 | `claude-mem-bootstrap` | First-time setup on a repo | Run `claude-mem index`, derive scopes, verify `serve` is reachable |
-| `claude-mem-recall` | Start of any task, before reading files | When to `recall` vs work from existing context; how to interpret budget overflow |
+| `claude-mem-recall` | Start of any task, before reading files | When to `recall` vs work from existing context; how to interpret budget overflow and `tier_histogram` |
+| `claude-mem-trace` | Following code flow (callers, routes, handlers) | When to call `trace(seed)` instead of repeated `expand` or `Grep`; how to pick seeds; depth selection |
 | `claude-mem-task` | Long or multi-part task intent | When to `plan_task`; how to dispatch sub-tasks to subagents with bundles; how to write `decisions_made` back |
 | `claude-mem-handoff` | End of session, context bloat, task switch | When to `handoff()` and `resume(task_id)` |
 
@@ -468,31 +539,36 @@ The skills are the contract between Claude Code's behavior and the MCP server's 
 
 ## 12. Build Plan (phased)
 
-### Phase 1 — Substrate and retrieval (weeks 1–3)
+### Phase 1 — Substrate, retrieval, traversal (weeks 1–3)
 
-- SQLite schema, FTS5, sqlite-vec integration
-- Indexer for code (tree-sitter, Python+JS+TS first) and docs
+- SQLite schema (unit + relation + FTS5 + sqlite-vec)
+- Indexer for code (tree-sitter, Python + JS/TS) and docs
 - T1 deterministic headers; embeddings via bge-small
-- `recall` and `expand` MCP tools
+- RRF + feature rerank ranking (§4.1)
+- Budget-aware tiered fill (§4.2)
+- **`recall`, `trace`, `expand`** MCP tools
+- Imports synthesizer (cross-language) + at least one route synthesizer (Flask or FastAPI)
+- MCP `initialize` instructions block (§11.1)
 - `claude-mem index` CLI
-- **Exit criterion:** on a real repo, `recall("how does auth work")` returns a ranked list of relevant T1 summaries within 3k tokens in <500ms.
+- **Exit criterion:** on a real repo, `recall("how does auth work")` returns ranked results within 3k tokens in <500ms; `trace` from an auth handler returns the route, the handler, and direct callees in one 8k-budget call.
 
-### Phase 2 — Memory and tasks (weeks 4–6)
+### Phase 2 — Memory, tasks, synthesizer coverage (weeks 4–6)
 
 - Memory layer schema and write path
-- `remember`, `forget`, `scopes`, `stats` tools
+- `remember`, `forget`, `scopes`, `stats` tools (with fallback-rate metric in `stats`)
 - T2 LLM summaries via Claude Code auth
 - `plan_task`, `tasks` tools
 - Distillation CLI with user-confirm UX
-- **Exit criterion:** a working session ends with a usable distilled memory set; `plan_task` produces sub-tasks with attached bundles that another session can pick up.
+- Remaining v1 synthesizers (Django, Express, React hooks)
+- **Exit criterion:** a working session ends with a usable distilled memory set; `plan_task` produces sub-tasks with attached bundles a fresh session can pick up.
 
 ### Phase 3 — Handoff and integration (weeks 7–8)
 
 - `handoff`, `resume` tools and markdown snapshot rendering
 - File watcher daemon in `serve`
-- Companion skills in parent plugin
+- Companion skills in parent plugin (incl. `claude-mem-trace`)
 - `claude-mem doctor`, install-hooks
-- **Exit criterion:** end-to-end demo — start task, decompose, work in subagents, handoff, resume in fresh session — all within budget.
+- **Exit criterion:** end-to-end demo — start task, decompose, work, handoff, resume in fresh session — all within budget and with fallback-to-native rate below a threshold to be set in Phase 2.
 
 ### Phase 4 — Polish (week 9+)
 
@@ -512,7 +588,7 @@ To keep the v1 surface honest, these are explicit non-goals — not "later," but
 - Team sync, conflict resolution across users, cloud storage.
 - A query language beyond `recall(query, scopes?, layers?)`.
 - A graph database. The `relation` table is sufficient.
-- Real-time semantic understanding beyond what tree-sitter + embeddings provide. Call-graph reasoning, type inference, dataflow are out.
+- Sound program analysis. Type inference, full dataflow, and complete call graphs remain out. **In their place**, claude-mem ships targeted *heuristic synthesizers* (§7.3) that emit framework-aware edges (route → handler, hook → consumer, etc.) good enough to keep Claude off `grep`. The bar is "useful," not "sound."
 
 ---
 
@@ -529,7 +605,9 @@ Local, observable, no telemetry:
 
 ## 15. Open Questions (to resolve during implementation, not now)
 
-1. RRF `k`, feature multiplier defaults, and `TOP_PROMOTE` / `T0_SINGLE_CAP` (§4.1, §4.2) need real-workload calibration.
+1. RRF `k`, feature multiplier defaults, `TOP_PROMOTE` / `T0_SINGLE_CAP` (§4.1, §4.2), and per-tool default budgets (§5) need real-workload calibration. Stats output (`stats()`) should expose fallback-to-native-tool rate so initialize-instruction text (§11.1) can be tuned against observed behavior.
+6. Synthesizer coverage at v1 launch (§7.3): the table lists 7 synthesizers across Python and JS/TS. Which are critical-path for the first dogfood repo vs. nice-to-have? Pick during Phase 1 scoping.
+7. `trace` relation-kind weighting (§5.1): is `route_to` more important than `imports`? Heuristic-tunable, validate on real traces.
 2. Subagent dispatch UX: should `plan_task` optionally spawn subagents directly, or always return a tree for Claude to dispatch?
 3. Memory `confidence` semantics: numeric (0–1), categorical (high/med/low), or both?
 4. Whether `forget` should support time-window queries ("forget anything I said about X this week").
