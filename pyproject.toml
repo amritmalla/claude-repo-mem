@@ -39,3 +39,5 @@ packages = ["src/claude_mem"]
 pythonpath = ["src"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = ["slow: tests that download models or are otherwise expensive"]
+addopts = "-m 'not slow'"
