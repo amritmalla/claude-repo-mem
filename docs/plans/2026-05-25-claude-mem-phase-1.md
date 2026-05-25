@@ -6,7 +6,11 @@
 
 **Architecture:** Single Python package `claude_mem` exposing a CLI (`claude-mem`) and a stdio MCP server. State lives in `<repo>/.claude-mem/db.sqlite` (FTS5 + sqlite-vec + relational schema, all one file). Indexer parses code via tree-sitter and docs via mdAST into semantic units; framework synthesizers emit graph edges. Retrieval is RRF + feature rerank with budget-aware tiered fill (§4.1, §4.2 of spec).
 
-**Tech Stack:** Python 3.11+, `pytest`, `mcp` (the official Anthropic MCP Python SDK), `sqlite-vec`, `tree-sitter` + `tree-sitter-languages`, `markdown-it-py`, `sentence-transformers` (bge-small), `tiktoken`, `click` for CLI, `pydantic` for tool schemas.
+**Tech Stack:** Python 3.11+, `pytest`, `mcp` (the official Anthropic MCP Python SDK), `sqlite-vec`, `tree-sitter` + per-language packages (`tree-sitter-python`, `tree-sitter-javascript`, `tree-sitter-typescript` — `tree-sitter-languages` lacks Windows wheels), `markdown-it-py`, `sentence-transformers` (bge-small), `tiktoken`, `click` for CLI, `pydantic` for tool schemas.
+
+**Implementation lessons learned during execution** (read before dispatching tasks 10+):
+1. `tree-sitter-languages` has no Windows wheels — use per-language packages. The `get_parser("python")` API does NOT exist; instead use `from tree_sitter import Language, Parser; import tree_sitter_python; LANG = Language(tree_sitter_python.language()); parser = Parser(LANG)`. For TS use `tree_sitter_typescript.language_typescript()` and `language_tsx()`. Patch Tasks 10/11 code accordingly before dispatch.
+2. Test isolation: when a test uses `tmp_path` and walks parent directories, ambient `.claude-mem` in the developer's home dir can pollute the test. Use `monkeypatch.setattr(Path, "is_dir", ...)` to mask `.claude-mem` ancestors in any "raises when not in repo" tests.
 
 **Spec:** `docs/specs/2026-05-25-claude-mem-design.md`. This plan implements Phase 1 (§12 of spec).
 
