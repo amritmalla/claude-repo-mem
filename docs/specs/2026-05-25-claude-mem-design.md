@@ -124,9 +124,9 @@ Four subsystems, each independently testable. Boundaries:
 
 ### 2.3 Key behaviors
 
-1. **Retrieval is budgeted greedy fill on T1 summaries.** Given a query and a budget B (default 3,000 tokens): embed the query, run hybrid search across all three layers, rank with a single blended score, pack T1 summaries until B is hit. Return the ranked list with opaque handles for everything that didn't fit.
+1. **Retrieval is budget-aware tiered fill.** Given a query and a budget B (default 3,000 tokens): embed the query, run hybrid search (BM25 + vector) across all three layers, rank with RRF + feature multipliers, then greedily pack each candidate at the richest tier that fits — T0 for top-ranked small units, T2 for mid-tier, T1 for the long tail. Two guardrails (`TOP_PROMOTE`, `T0_SINGLE_CAP`, §4.2) prevent any single unit from dominating the response. Return the ranked list with opaque handles for everything that overflowed.
 
-2. **Expansion is one handle at a time, Claude-driven.** `expand(handle, tier)` returns just that unit at the requested tier (T2 LLM summary or T0 full content). Claude controls token spend explicitly. The server never auto-expands.
+2. **Expansion handles the long tail, not the common case.** `expand(handle, tier)` returns one unit at the requested tier (T2 or T0). The common case (top result needs full content) is already handled by §4.2's auto-promotion; `expand` exists for cases where a mid-ranked T2 turns out to be the critical one.
 
 3. **Reindex is incremental and idempotent.** Files are content-hashed; unchanged files are skipped. Changed files are re-parsed into semantic units, unit content_hashes are diffed, and only changed/new units are re-embedded and re-summarized. LLM cost is paid only for actual diffs.
 
@@ -213,40 +213,70 @@ Three layers, one schema, one ranking function. Cross-layer relations (memory→
 
 ## 4. Retrieval
 
-### 4.1 Ranking
+### 4.1 Ranking — RRF + feature rerank
 
-Single blended score per candidate unit:
+Two-stage. **Stage 1** fuses the two retrieval-ranked lists (BM25 and vector) with Reciprocal Rank Fusion. **Stage 2** applies per-unit feature multipliers. Rationale: BM25 and cosine scores live on incomparable scales — linearly combining their normalized values is fragile and demands constant retuning. RRF is scale-free and the industry default (Elastic, Vespa, Weaviate). Scope/recency/layer are per-unit features, not ranked lists, so they belong in a rerank pass, not the fusion.
 
 ```
-score = w_bm25 * bm25_norm
-      + w_vec  * cosine_norm
-      + w_scope * scope_match
-      + w_recency * recency_decay(last_seen_at)
-      + w_layer * layer_boost[layer]
-      - w_super * is_superseded
+# Stage 1: RRF over the two ranked candidate lists
+rrf(u) = 1 / (k + rank_bm25(u)) + 1 / (k + rank_vec(u))      # k = 60
+
+# Stage 2: feature rerank
+final(u) = rrf(u)
+         * scope_mult(u)
+         * recency_mult(u)
+         * layer_mult(u)
+         * (0 if superseded else 1)
 ```
 
-Defaults (subject to tuning):
+Feature multipliers (defaults, subject to calibration):
 
-| Term | Weight | Notes |
+| Feature | Formula | Notes |
 |---|---|---|
-| `w_bm25` | 0.30 | FTS5 normalized to [0,1] |
-| `w_vec` | 0.40 | cosine on bge-small embeddings |
-| `w_scope` | 0.15 | 1.0 if query scope matches unit scope, decayed by tree distance |
-| `w_recency` | 0.10 | exp decay, half-life 30 days |
-| `w_layer` | 0.05 | memory: +1.0, docs: +0.3, code: 0 |
-| `w_super` | 1.0 (penalty) | superseded units are filtered by default |
+| `scope_mult` | 1.0 exact match, 0.7 sibling, 0.4 unrelated | Decay by tree distance |
+| `recency_mult` | `0.5 + 0.5 * exp(-age_days * ln2 / 30)` | Half-life 30d, floor 0.5 |
+| `layer_mult` | memory 1.5, docs 1.1, code 1.0 | Memory wins ties |
+| superseded | hard zero (filtered) | Unless `include_superseded=true` |
 
-### 4.2 Budgeted greedy fill
+A candidate that appears in only one of the two retrieval lists still gets a fusion score from the single contribution; this is RRF's standard behavior and is the right thing for handling vector-only or keyword-only matches.
+
+### 4.2 Budget-aware tiered fill
+
+The retriever does not force Claude to round-trip for every drill-down. Instead it greedily picks the **richest tier that fits** for each candidate in rank order, with two guardrails to preserve the "no surprise blowup" invariant.
+
+```
+TOP_PROMOTE = 5            # only top-ranked candidates are eligible for T0 promotion
+T0_SINGLE_CAP = 0.4        # a single T0 unit can never exceed 40% of remaining budget
+
+for u in candidates_by_score:
+    if rank(u) <= TOP_PROMOTE and size_t0(u) <= remaining * T0_SINGLE_CAP:
+        include(u, tier=T0); continue          # top result, fits cleanly → full content
+    if size_t2(u) <= remaining:
+        include(u, tier=T2); continue          # mid-tier → LLM summary
+    if size_t1(u) <= remaining:
+        include(u, tier=T1); continue          # tail → deterministic header
+    overflow.append(handle(u))                  # didn't fit at any tier
+```
+
+Why the guardrails:
+
+- **`TOP_PROMOTE`** ensures budget is spent on breadth (many T1/T2 items) rather than swallowed by a mid-relevance T0. Without it, a 600-token T2-less unit ranked 12th could displace ten T1 results that would have been more useful.
+- **`T0_SINGLE_CAP`** caps any single unit at 40% of remaining budget, so no oversized function can dominate the response.
+
+Claude retains `expand(handle, tier)` for cases where the auto-fill missed (e.g. a mid-ranked T2 was actually critical and Claude wants T0). The auto-fill optimizes the common case; expand handles the long tail.
+
+### 4.3 Pipeline
 
 ```
 1. Embed query.
-2. Pull top-K (default 100) candidates via hybrid search across all layers.
-3. Rank by §4.1 score.
-4. Greedy pack: for each candidate in score order,
-   include t1_header if it fits in remaining budget; else add to overflow.
-5. Return { items: [...], overflow_handles: [...], budget_used, budget_total }.
+2. Retrieve top-K (default 100) candidates from BM25 (FTS5) and vector (sqlite-vec) independently.
+3. Compute RRF + feature multipliers; sort by final(u).
+4. Run budget-aware tiered fill (§4.2).
+5. Return { items: [{handle, tier, content}, ...], overflow_handles: [...],
+           budget_used, budget_total, tier_histogram }.
 ```
+
+`tier_histogram` (e.g. `{T0: 1, T2: 4, T1: 8}`) is included so Claude can see at a glance how much detail it got and decide whether to drill further.
 
 ### 4.3 Scope filtering
 
@@ -499,7 +529,7 @@ Local, observable, no telemetry:
 
 ## 15. Open Questions (to resolve during implementation, not now)
 
-1. Ranking weight defaults (§4.1) need real-workload calibration.
+1. RRF `k`, feature multiplier defaults, and `TOP_PROMOTE` / `T0_SINGLE_CAP` (§4.1, §4.2) need real-workload calibration.
 2. Subagent dispatch UX: should `plan_task` optionally spawn subagents directly, or always return a tree for Claude to dispatch?
 3. Memory `confidence` semantics: numeric (0–1), categorical (high/med/low), or both?
 4. Whether `forget` should support time-window queries ("forget anything I said about X this week").
