@@ -30,6 +30,11 @@ def tool_schema() -> Tool:
 
 
 async def handle(settings: Settings, args: dict[str, Any]) -> list[TextContent]:
+    from ..observability.counters import get_counters
+    try:
+        get_counters().expand_calls += 1
+    except Exception:
+        pass
     repo = Repository(connect(settings.db_path))
     unit = repo.get_unit(args["handle"])
     if unit is None:

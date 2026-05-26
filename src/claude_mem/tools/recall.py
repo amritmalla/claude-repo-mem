@@ -35,6 +35,11 @@ def tool_schema() -> Tool:
 
 
 async def handle(settings: Settings, embedder: Embedder, args: dict[str, Any]) -> list[TextContent]:
+    from ..observability.counters import get_counters
+    try:
+        get_counters().recall_calls += 1
+    except Exception:
+        pass
     result = recall(
         settings,
         query=args["query"],

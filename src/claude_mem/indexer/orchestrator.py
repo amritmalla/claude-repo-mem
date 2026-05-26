@@ -53,6 +53,8 @@ def full_reindex(settings: Settings, embedder: Optional[Embedder] = None) -> dic
     all_relations.extend(route_rels)
     all_relations.extend(ImportsSynthesizer().synthesize(all_units, sources, repo_root))
 
+    all_units = [_relativize_scope(u, repo_root) for u in all_units]
+
     # Embeddings (optional — skipped if embedder is None for fast unit tests).
     embeddings: dict[str, np.ndarray] = {}
     if embedder is not None:
@@ -70,6 +72,27 @@ def full_reindex(settings: Settings, embedder: Optional[Embedder] = None) -> dic
         "relations_written": len(all_relations),
         "files_seen": len(sources),
     }
+
+
+def _relativize_scope(u: Unit, repo_root: Path) -> Unit:
+    """Rewrite absolute path-based scopes to repo-relative form.
+
+    Memory units already use logical scopes (e.g. "backend/auth") — leave them.
+    Code/docs units typically have scope = absolute parent dir parts joined; we
+    detect that by trying to relativize against repo_root.
+    """
+    if u.layer == "memory":
+        return u
+    try:
+        rr_parts = repo_root.resolve().parts
+        sc_parts = tuple(p for p in u.scope.split("/") if p)
+        if len(sc_parts) >= len(rr_parts) and tuple(sc_parts[: len(rr_parts)]) == rr_parts:
+            rel = "/".join(sc_parts[len(rr_parts):]) or "root"
+            from dataclasses import replace
+            return replace(u, scope=rel)
+    except (ValueError, OSError):
+        pass
+    return u
 
 
 def _pick_parser(path: Path) -> Optional[Parser]:

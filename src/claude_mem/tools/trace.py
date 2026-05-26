@@ -36,6 +36,11 @@ def tool_schema() -> Tool:
 
 
 async def handle(settings: Settings, args: dict[str, Any]) -> list[TextContent]:
+    from ..observability.counters import get_counters
+    try:
+        get_counters().trace_calls += 1
+    except Exception:
+        pass
     result = trace(
         settings,
         seeds=args["seed_handles"],

@@ -14,6 +14,10 @@ from mcp.types import Tool, TextContent
 from .tools import recall as recall_tool
 from .tools import trace as trace_tool
 from .tools import expand as expand_tool
+from .tools import remember as remember_tool
+from .tools import forget as forget_tool
+from .tools import scopes as scopes_tool
+from .tools import stats as stats_tool
 
 
 SERVER_INSTRUCTIONS = """\
@@ -46,6 +50,10 @@ def build_server(settings=None, embedder=None) -> Server:
             recall_tool.tool_schema(),
             trace_tool.tool_schema(),
             expand_tool.tool_schema(),
+            remember_tool.tool_schema(),
+            forget_tool.tool_schema(),
+            scopes_tool.tool_schema(),
+            stats_tool.tool_schema(),
         ]
 
     @server.call_tool()
@@ -61,6 +69,14 @@ def build_server(settings=None, embedder=None) -> Server:
             return await trace_tool.handle(s, arguments)
         if name == "expand":
             return await expand_tool.handle(s, arguments)
+        if name == "remember":
+            return await remember_tool.handle(s, arguments)
+        if name == "forget":
+            return await forget_tool.handle(s, arguments)
+        if name == "scopes":
+            return await scopes_tool.handle(s, arguments)
+        if name == "stats":
+            return await stats_tool.handle(s, arguments)
         return [TextContent(type="text", text=f"unknown tool: {name}")]
 
     return server
