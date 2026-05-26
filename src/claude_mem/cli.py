@@ -60,6 +60,48 @@ def doctor(root: Path | None) -> None:
 
 
 @main.command()
+@click.option("--root", type=click.Path(file_okay=False, path_type=Path), default=None)
+@click.option("--transcript", type=click.Path(dir_okay=False, exists=True, path_type=Path),
+              default=None, help="Explicit transcript JSONL path (otherwise auto-located)")
+@click.option("--yes", is_flag=True, default=False, help="Accept all proposals without prompting")
+def distill(root: Path | None, transcript: Path | None, yes: bool) -> None:
+    """Extract durable memories from the most recent Claude Code transcript."""
+    repo_root = root or Path.cwd()
+    settings = Settings.for_repo(repo_root)
+    init_db(settings.db_path)
+
+    from .distill.confirm import run_distill
+    from .llm.factory import make_llm_client
+
+    llm = make_llm_client(ctx=None) if False else _make_cli_llm()
+
+    def prompt_fn(p) -> str:
+        click.echo(f"\n[{p.kind} @ {p.scope} | conf={p.confidence:.2f}]")
+        click.echo(p.fact)
+        return click.prompt("[a]ccept / [s]kip / [q]uit", default="s",
+                            type=click.Choice(["a", "s", "q"]), show_choices=False)
+
+    result = asyncio.run(run_distill(
+        settings, llm=llm, transcript_path=transcript,
+        auto_accept=yes, prompt_fn=None if yes else prompt_fn,
+    ))
+    click.echo(f"transcript={result.get('transcript')} "
+               f"proposals={result['proposals']} written={result['written']}")
+
+
+def _make_cli_llm():
+    """CLI path: prefer the Anthropic fallback (sampling requires MCP Context)."""
+    import os
+    os.environ.setdefault("CLAUDE_MEM_LLM", "anthropic")
+    from .llm.factory import make_llm_client
+    from .llm.base import LLMError
+    try:
+        return make_llm_client(ctx=None)
+    except LLMError as e:
+        raise click.ClickException(str(e))
+
+
+@main.command()
 def serve() -> None:
     """Run the MCP server on stdio."""
     from .server import serve_stdio

@@ -18,6 +18,8 @@ from .tools import remember as remember_tool
 from .tools import forget as forget_tool
 from .tools import scopes as scopes_tool
 from .tools import stats as stats_tool
+from .tools import plan_task as plan_task_tool
+from .tools import tasks as tasks_tool
 
 
 SERVER_INSTRUCTIONS = """\
@@ -54,6 +56,8 @@ def build_server(settings=None, embedder=None) -> Server:
             forget_tool.tool_schema(),
             scopes_tool.tool_schema(),
             stats_tool.tool_schema(),
+            plan_task_tool.tool_schema(),
+            tasks_tool.tool_schema(),
         ]
 
     @server.call_tool()
@@ -77,6 +81,12 @@ def build_server(settings=None, embedder=None) -> Server:
             return await scopes_tool.handle(s, arguments)
         if name == "stats":
             return await stats_tool.handle(s, arguments)
+        if name == "plan_task":
+            from .llm.factory import make_llm_client
+            llm = make_llm_client(ctx=None)  # falls back appropriately; sampling Context wiring is a later refinement
+            return await plan_task_tool.handle(s, llm, arguments)
+        if name == "tasks":
+            return await tasks_tool.handle(s, arguments)
         return [TextContent(type="text", text=f"unknown tool: {name}")]
 
     return server

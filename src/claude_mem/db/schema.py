@@ -15,7 +15,7 @@ DDL = [
     """
     CREATE TABLE IF NOT EXISTS unit (
         id              TEXT PRIMARY KEY,
-        layer           TEXT NOT NULL CHECK (layer IN ('memory','docs','code')),
+        layer           TEXT NOT NULL CHECK (layer IN ('memory','docs','code','task')),
         kind            TEXT NOT NULL,
         scope           TEXT NOT NULL,
         source_ref      TEXT,

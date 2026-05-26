@@ -1,0 +1,3 @@
+{"message": {"role": "user", "content": "We chose RS256 over HS256 for JWT signing because the gateway needs to verify without the signing key."}}
+{"message": {"role": "assistant", "content": [{"type": "text", "text": "Got it — I'll note that as the auth decision."}]}}
+{"message": {"role": "user", "content": "Also, we always run pytest -q on Windows."}}
