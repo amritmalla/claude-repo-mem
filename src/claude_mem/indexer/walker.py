@@ -30,6 +30,11 @@ def _walk(dirpath: Path) -> Iterator[Path]:
         return
     for entry in entries:
         if entry.is_dir():
+            if entry.name == ".claude-mem":
+                mem = entry / "memory"
+                if mem.is_dir():
+                    yield from _walk(mem)
+                continue
             if entry.name in SKIP_DIRS:
                 continue
             yield from _walk(entry)

@@ -14,12 +14,13 @@ from .parsers.base import Parser, ParseResult
 from .parsers.code_jsts import JsTsParser
 from .parsers.code_python import PythonParser
 from .parsers.markdown import MarkdownParser
+from .parsers.memory_md import MemoryMarkdownParser
 from .synthesizers.flask_routes import FlaskRoutesSynthesizer
 from .synthesizers.imports import ImportsSynthesizer
 from .walker import walk_repo, hash_file
 
 
-PARSERS: list[Parser] = [PythonParser(), JsTsParser(), MarkdownParser()]
+PARSERS: list[Parser] = [MemoryMarkdownParser(), PythonParser(), JsTsParser(), MarkdownParser()]
 
 
 def full_reindex(settings: Settings, embedder: Optional[Embedder] = None) -> dict:
