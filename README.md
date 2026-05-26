@@ -23,8 +23,10 @@ Memory is the second half. `remember(fact, scope, kind="decision")` writes a mar
 ## Install
 
 ```bash
-pip install claude-mem
+pip install claude-repo-mem
 ```
+
+> The PyPI package is `claude-repo-mem` (the short `claude-mem` name was already taken). The CLI command stays `claude-mem` and the on-disk state directory stays `.claude-mem/`. Either `claude-mem` or `claude-repo-mem` works as a CLI alias.
 
 Requires Python 3.11+. Development install:
 

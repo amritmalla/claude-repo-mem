@@ -1,5 +1,5 @@
 [project]
-name = "claude-mem"
+name = "claude-repo-mem"
 version = "0.1.0"
 description = "Contextual memory & retrieval engine for Claude Code"
 requires-python = ">=3.11"
@@ -32,6 +32,7 @@ dev = [
 
 [project.scripts]
 claude-mem = "claude_mem.cli:main"
+claude-repo-mem = "claude_mem.cli:main"
 
 [build-system]
 requires = ["hatchling"]
