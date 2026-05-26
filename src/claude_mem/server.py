@@ -20,6 +20,8 @@ from .tools import scopes as scopes_tool
 from .tools import stats as stats_tool
 from .tools import plan_task as plan_task_tool
 from .tools import tasks as tasks_tool
+from .tools import handoff as handoff_tool
+from .tools import resume as resume_tool
 
 
 SERVER_INSTRUCTIONS = """\
@@ -58,6 +60,8 @@ def build_server(settings=None, embedder=None) -> Server:
             stats_tool.tool_schema(),
             plan_task_tool.tool_schema(),
             tasks_tool.tool_schema(),
+            handoff_tool.tool_schema(),
+            resume_tool.tool_schema(),
         ]
 
     @server.call_tool()
@@ -87,6 +91,10 @@ def build_server(settings=None, embedder=None) -> Server:
             return await plan_task_tool.handle(s, llm, arguments)
         if name == "tasks":
             return await tasks_tool.handle(s, arguments)
+        if name == "handoff":
+            return await handoff_tool.handle(s, arguments)
+        if name == "resume":
+            return await resume_tool.handle(s, arguments)
         return [TextContent(type="text", text=f"unknown tool: {name}")]
 
     return server

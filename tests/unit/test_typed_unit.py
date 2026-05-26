@@ -40,3 +40,7 @@ def test_kind_valid_for_layer_constants():
     assert "task" in KIND_VALID_FOR_LAYER["task"]
     assert "section" in KIND_VALID_FOR_LAYER["docs"]
     assert "function" in KIND_VALID_FOR_LAYER["code"]
+
+
+def test_task_snapshot_kind_valid():
+    assert "task_snapshot" in KIND_VALID_FOR_LAYER["task"]
