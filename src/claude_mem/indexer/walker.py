@@ -4,7 +4,7 @@ import hashlib
 from pathlib import Path
 from typing import Iterator
 
-SUPPORTED_EXTS = {".py", ".js", ".jsx", ".ts", ".tsx", ".md", ".markdown"}
+SUPPORTED_EXTS = {".py", ".js", ".jsx", ".ts", ".tsx", ".md", ".markdown", ".java", ".go", ".rs"}
 SKIP_DIRS = {
     ".git", ".hg", ".svn",
     ".claude-mem",

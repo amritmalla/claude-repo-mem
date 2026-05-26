@@ -43,7 +43,7 @@ def index(root: Path | None, no_embed: bool) -> None:
 @click.option("--root", type=click.Path(file_okay=False, path_type=Path),
               default=None)
 def doctor(root: Path | None) -> None:
-    """Diagnostics — show index size and config."""
+    """Diagnostics — index size, layer breakdown, T2 coverage, counters."""
     repo_root = root or Path.cwd()
     try:
         settings = Settings.discover(repo_root)
@@ -53,10 +53,56 @@ def doctor(root: Path | None) -> None:
     conn = connect(settings.db_path)
     n_units = conn.execute("SELECT COUNT(*) FROM unit").fetchone()[0]
     n_rels = conn.execute("SELECT COUNT(*) FROM relation").fetchone()[0]
+    by_layer = {
+        r["layer"]: r["n"] for r in conn.execute(
+            "SELECT layer, COUNT(*) AS n FROM unit GROUP BY layer"
+        ).fetchall()
+    }
+    t2_eligible = conn.execute(
+        "SELECT COUNT(*) FROM unit WHERE layer IN ('code','docs')"
+    ).fetchone()[0]
+    t2_done = conn.execute(
+        "SELECT COUNT(*) FROM unit WHERE layer IN ('code','docs') AND t2_summary IS NOT NULL"
+    ).fetchone()[0]
+    from .observability.counters import get_counters
+    counters = get_counters().to_dict()
+
     click.echo(f"repo_root: {settings.repo_root}")
     click.echo(f"db: {settings.db_path}")
     click.echo(f"units: {n_units}")
     click.echo(f"relations: {n_rels}")
+    click.echo(f"by_layer: {by_layer}")
+    click.echo(f"t2_coverage: {t2_done}/{t2_eligible}")
+    click.echo(f"counters: {counters}")
+
+
+@main.command("install-hooks")
+@click.option("--root", type=click.Path(file_okay=False, path_type=Path), default=None)
+@click.option("--force", is_flag=True, default=False)
+def install_hooks(root: Path | None, force: bool) -> None:
+    """Install a post-commit hook that runs `claude-mem index --no-embed`."""
+    repo_root = root or Path.cwd()
+    git_dir = repo_root / ".git"
+    if not git_dir.is_dir():
+        raise click.ClickException(f"not a git repo: {repo_root}")
+    hooks_dir = git_dir / "hooks"
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+    hook_path = hooks_dir / "post-commit"
+    if hook_path.exists() and not force:
+        raise click.ClickException(
+            f"{hook_path} already exists; rerun with --force to overwrite"
+        )
+    hook_path.write_text(
+        "#!/bin/sh\n"
+        "# Installed by claude-mem install-hooks\n"
+        "claude-mem index --no-embed >/dev/null 2>&1 || true\n",
+        encoding="utf-8",
+    )
+    try:
+        hook_path.chmod(0o755)
+    except Exception:
+        pass  # Windows
+    click.echo(f"installed: {hook_path}")
 
 
 @main.command()

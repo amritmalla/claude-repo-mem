@@ -13,14 +13,25 @@ from ..units.model import Unit, Relation
 from .parsers.base import Parser, ParseResult
 from .parsers.code_jsts import JsTsParser
 from .parsers.code_python import PythonParser
+from .parsers.code_java import JavaParser
+from .parsers.code_go import GoParser
+from .parsers.code_rust import RustParser
 from .parsers.markdown import MarkdownParser
 from .parsers.memory_md import MemoryMarkdownParser
 from .synthesizers.flask_routes import FlaskRoutesSynthesizer
+from .synthesizers.django_urls import DjangoUrlsSynthesizer
+from .synthesizers.express_routes import ExpressRoutesSynthesizer
+from .synthesizers.react_hooks import ReactHooksSynthesizer
 from .synthesizers.imports import ImportsSynthesizer
 from .walker import walk_repo, hash_file
 
 
-PARSERS: list[Parser] = [MemoryMarkdownParser(), PythonParser(), JsTsParser(), MarkdownParser()]
+PARSERS: list[Parser] = [
+    MemoryMarkdownParser(),
+    PythonParser(), JsTsParser(),
+    JavaParser(), GoParser(), RustParser(),
+    MarkdownParser(),
+]
 
 
 def full_reindex(settings: Settings, embedder: Optional[Embedder] = None) -> dict:
@@ -46,12 +57,18 @@ def full_reindex(settings: Settings, embedder: Optional[Embedder] = None) -> dic
         sources[path] = text
 
     # Synthesizers run on the full snapshot.
-    extra_units, route_rels = FlaskRoutesSynthesizer().synthesize_with_units(
-        all_units, sources, repo_root
-    )
-    all_units.extend(extra_units)
-    all_relations.extend(route_rels)
+    for route_synth in (
+        FlaskRoutesSynthesizer(),
+        DjangoUrlsSynthesizer(),
+        ExpressRoutesSynthesizer(),
+    ):
+        extra_units, route_rels = route_synth.synthesize_with_units(
+            all_units, sources, repo_root
+        )
+        all_units.extend(extra_units)
+        all_relations.extend(route_rels)
     all_relations.extend(ImportsSynthesizer().synthesize(all_units, sources, repo_root))
+    all_relations.extend(ReactHooksSynthesizer().synthesize(all_units, sources, repo_root))
 
     all_units = [_relativize_scope(u, repo_root) for u in all_units]
 

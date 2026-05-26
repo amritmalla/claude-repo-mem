@@ -11,7 +11,7 @@ KIND_VALID_FOR_LAYER: dict[str, set[str]] = {
     "memory": {"fact", "decision", "preference", "convention"},
     "task": {"task", "task_snapshot"},
     "docs": {"section", "frontmatter"},
-    "code": {"function", "method", "class", "route", "interface", "module"},
+    "code": {"function", "method", "class", "route", "interface", "module", "struct", "trait"},
 }
 
 

@@ -2,7 +2,7 @@
 
 Contextual memory and retrieval engine for Claude Code. Local-first MCP server that gives Claude durable project memory and hierarchical retrieval over a single repo's code, docs, and prior decisions.
 
-**Status:** Phase 3 — handoff, resume, file watcher, companion skills. Phase 4 is polish.
+**Status:** Phase 4 — Java/Go/Rust parsers, Django/Express/React synthesizers, install-hooks, background queue.
 
 ## Install
 
@@ -18,6 +18,8 @@ claude-mem index                # full reindex
 claude-mem doctor               # show index size
 claude-mem serve --watch        # MCP server with background incremental reindexing (default)
 claude-mem serve --no-watch     # MCP server, no file watcher
+claude-mem install-hooks        # post-commit reindex (alternative to --watch)
+claude-mem doctor               # diagnostics: layer counts, T2 coverage, counters
 claude-mem distill --yes        # extract durable memories from latest session
 ```
 
@@ -47,6 +49,9 @@ command, set `ANTHROPIC_API_KEY` to use the Anthropic API directly.
 
 Companion skills are shipped in `plugin/skills/` — `claude-mem-recall`, `claude-mem-trace`,
 `claude-mem-handoff` — telling Claude when to reach for these tools.
+
+Languages indexed: Python, JavaScript, TypeScript, Markdown, Java, Go, Rust.
+Synthesizers: Flask / Django / Express routes, Python imports, React `useState` hooks.
 
 ## Architecture
 

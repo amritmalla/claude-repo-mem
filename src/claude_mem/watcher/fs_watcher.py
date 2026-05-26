@@ -13,6 +13,7 @@ from ..config import Settings
 from ..embeddings.base import Embedder
 from ..indexer.incremental import incremental_reindex
 from ..indexer.walker import SKIP_DIRS, SUPPORTED_EXTS
+from ..queue.background import BackgroundQueue
 from .debounce import PathDebouncer
 
 
@@ -23,6 +24,7 @@ class FileWatcher:
         *,
         embedder: Optional[Embedder] = None,
         quiet_ms: int = 750,
+        queue: Optional[BackgroundQueue] = None,
     ) -> None:
         self.settings = settings
         self.embedder = embedder
@@ -35,8 +37,12 @@ class FileWatcher:
         self._tick_thread: Optional[threading.Thread] = None
         self._handler = _ChangeHandler(self._on_change)
         self._quiet_ms = quiet_ms
+        self._queue = queue or BackgroundQueue()
+        self._owns_queue = queue is None
 
     def start(self) -> None:
+        if self._owns_queue:
+            self._queue.start()
         self._observer.schedule(
             self._handler, str(self.settings.repo_root), recursive=True
         )
@@ -50,6 +56,8 @@ class FileWatcher:
         self._observer.join(timeout=2.0)
         if self._tick_thread:
             self._tick_thread.join(timeout=2.0)
+        if self._owns_queue:
+            self._queue.stop()
 
     def _on_change(self, path: Path) -> None:
         if not self._is_indexable(path):
@@ -73,10 +81,17 @@ class FileWatcher:
         return True
 
     def _on_flush(self, paths) -> None:
-        try:
-            incremental_reindex(self.settings, [Path(p) for p in paths], embedder=self.embedder)
-        except Exception as e:  # pragma: no cover — defensive
-            print(f"[claude-mem watcher] reindex failed: {e}", file=sys.stderr)
+        paths_list = [Path(p) for p in paths]
+        settings = self.settings
+        embedder = self.embedder
+
+        def job():
+            try:
+                incremental_reindex(settings, paths_list, embedder=embedder)
+            except Exception as e:  # pragma: no cover — defensive
+                print(f"[claude-mem watcher] reindex failed: {e}", file=sys.stderr)
+
+        self._queue.submit(job)
 
     def _tick_loop(self) -> None:
         interval = min(0.1, self._quiet_ms / 1000.0 / 4)
