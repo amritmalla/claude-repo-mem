@@ -121,10 +121,24 @@ def _relativize_scope(u: Unit, repo_root: Path) -> Unit:
     if u.layer == "memory":
         return u
     try:
-        rr_parts = repo_root.resolve().parts
-        sc_parts = tuple(p for p in u.scope.split("/") if p)
-        if len(sc_parts) >= len(rr_parts) and tuple(sc_parts[: len(rr_parts)]) == rr_parts:
-            rel = "/".join(sc_parts[len(rr_parts):]) or "root"
+        # Normalize and filter out empty parts/root anchors
+        rr_parts = [p for p in repo_root.resolve().parts if p and p != "/"]
+        sc_parts = [p for p in u.scope.split("/") if p]
+
+        # Helper to normalize Windows drive letters to make them match
+        def normalize_part(p: str) -> str:
+            p_upper = p.upper()
+            if len(p_upper) == 2 and p_upper[1] == ":":
+                return p_upper + "\\"
+            if len(p_upper) == 3 and p_upper[1:3] == ":\\":
+                return p_upper
+            return p
+
+        rr_parts_norm = [normalize_part(p) for p in rr_parts]
+        sc_parts_norm = [normalize_part(p) for p in sc_parts]
+
+        if len(sc_parts_norm) >= len(rr_parts_norm) and sc_parts_norm[:len(rr_parts_norm)] == rr_parts_norm:
+            rel = "/".join(sc_parts[len(rr_parts_norm):]) or "root"
             from dataclasses import replace
             return replace(u, scope=rel)
     except (ValueError, OSError):
