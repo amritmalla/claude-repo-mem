@@ -1,70 +1,111 @@
-# This workflow will upload a Python Package to PyPI when a release is created
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python#publishing-to-package-registries
+# Publish claude-repo-mem to PyPI when a GitHub Release is published.
+#
+# Uses PyPI Trusted Publishing (OIDC) — no API tokens stored as secrets.
+# Setup required ONCE on PyPI before the first publish:
+#   1. Visit https://pypi.org/manage/account/publishing/
+#   2. Add a "pending publisher" with:
+#        PyPI Project Name: claude-repo-mem
+#        Owner:             amritmalla
+#        Repository name:   claude-repo-mem
+#        Workflow name:     python-publish.yml
+#        Environment name:  pypi
+#   3. After the first successful publish, the project moves out of "pending".
+#
+# Also create a GitHub Environment named "pypi" under
+# Settings -> Environments. Add deployment protection rules (required reviewers,
+# branch filters) if you want a gated release.
 
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
-
-name: Upload Python Package
+name: Publish to PyPI
 
 on:
   release:
     types: [published]
+  workflow_dispatch: {}  # allow manual dry-runs from the Actions tab
 
 permissions:
   contents: read
 
+concurrency:
+  group: pypi-publish-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
-  release-build:
+  test:
+    name: Run test suite
     runs-on: ubuntu-latest
-
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: pyproject.toml
 
-      - name: Build release distributions
+      - name: Install
         run: |
-          # NOTE: put your own distribution build steps here.
-          python -m pip install build
-          python -m build
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
 
-      - name: Upload distributions
+      - name: Run tests
+        run: pytest -q
+
+  build:
+    name: Build sdist + wheel
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install build tools
+        run: python -m pip install --upgrade build twine
+
+      - name: Build distributions
+        run: python -m build
+
+      - name: Validate distributions
+        run: twine check --strict dist/*
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: release-dists
           path: dist/
+          if-no-files-found: error
+          retention-days: 7
 
-  pypi-publish:
+  publish:
+    name: Publish to PyPI
+    needs: build
     runs-on: ubuntu-latest
-    needs:
-      - release-build
-    permissions:
-      # IMPORTANT: this permission is mandatory for trusted publishing
-      id-token: write
-
-    # Dedicated environments with protections for publishing are strongly recommended.
-    # For more information, see: https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment#deployment-protection-rules
+    # Only run on the actual release event; workflow_dispatch builds but doesn't publish.
+    if: github.event_name == 'release'
     environment:
       name: pypi
-      # OPTIONAL: uncomment and update to include your PyPI project URL in the deployment status:
-      # url: https://pypi.org/p/YOURPROJECT
-      #
-      # ALTERNATIVE: if your GitHub Release name is the PyPI project version string
-      # ALTERNATIVE: exactly, uncomment the following line instead:
-      # url: https://pypi.org/project/YOURPROJECT/${{ github.event.release.name }}
-
+      url: https://pypi.org/p/claude-repo-mem
+    permissions:
+      # Mandatory for PyPI Trusted Publishing
+      id-token: write
     steps:
-      - name: Retrieve release distributions
+      - name: Download distributions
         uses: actions/download-artifact@v4
         with:
           name: release-dists
           path: dist/
 
-      - name: Publish release distributions to PyPI
+      - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
+          # Trusted publishing — no `password` field needed.
+          # Skip-existing prevents failures if the version was already uploaded.
+          skip-existing: true
+          verbose: true
