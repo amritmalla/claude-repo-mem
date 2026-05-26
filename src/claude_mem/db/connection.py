@@ -5,7 +5,7 @@ from pathlib import Path
 
 import sqlite_vec
 
-from .schema import DDL
+from .schema import ddl
 
 
 def connect(db_path: Path) -> sqlite3.Connection:
@@ -21,11 +21,11 @@ def connect(db_path: Path) -> sqlite3.Connection:
     return conn
 
 
-def init_db(db_path: Path) -> None:
-    """Create the DB and run DDL. Idempotent."""
+def init_db(db_path: Path, dim: int = 384) -> None:
+    """Create the DB and run DDL. Idempotent. `dim` sets unit_vec embedding width."""
     conn = connect(db_path)
     try:
-        for stmt in DDL:
+        for stmt in ddl(dim):
             conn.execute(stmt)
         conn.commit()
     finally:

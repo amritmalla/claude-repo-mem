@@ -22,18 +22,24 @@ def main() -> None:
               default=None, help="Repo root (defaults to cwd)")
 @click.option("--no-embed", is_flag=True, default=False,
               help="Skip embedding generation (faster, FTS-only retrieval)")
-def index(root: Path | None, no_embed: bool) -> None:
+@click.option("--embedder", type=str, default=None,
+              help="Embedder name (bge-small|openai|voyage); env CLAUDE_MEM_EMBEDDER")
+@click.option("--reset", is_flag=True, default=False,
+              help="Drop the DB before indexing (required when switching embedders)")
+def index(root: Path | None, no_embed: bool, embedder: str | None, reset: bool) -> None:
     """Full reindex of the repo."""
     repo_root = root or Path.cwd()
     settings = Settings.for_repo(repo_root)
-    init_db(settings.db_path)
+    if reset and settings.db_path.exists():
+        settings.db_path.unlink()
 
-    embedder = None
+    emb = None
     if not no_embed:
-        from .embeddings.bge_small import BgeSmallEmbedder
-        embedder = BgeSmallEmbedder()
+        from .embeddings.factory import make_embedder
+        emb = make_embedder(embedder)
+    init_db(settings.db_path, dim=emb.dim if emb else 384)
 
-    stats = full_reindex(settings, embedder=embedder)
+    stats = full_reindex(settings, embedder=emb)
     click.echo(f"units_written={stats['units_written']} "
                f"relations_written={stats['relations_written']} "
                f"files_seen={stats['files_seen']}")

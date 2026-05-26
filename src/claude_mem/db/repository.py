@@ -19,8 +19,8 @@ class SearchHit:
 
 def _serialize_embedding(vec: np.ndarray) -> bytes:
     arr = np.asarray(vec, dtype="float32")
-    if arr.shape != (384,):
-        raise ValueError(f"embedding must be shape (384,), got {arr.shape}")
+    if arr.ndim != 1:
+        raise ValueError(f"embedding must be 1-D, got shape {arr.shape}")
     return arr.tobytes()
 
 

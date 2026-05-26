@@ -39,6 +39,15 @@ def full_reindex(settings: Settings, embedder: Optional[Embedder] = None) -> dic
     conn = connect(settings.db_path)
     repository = Repository(conn)
 
+    if embedder is not None:
+        row = conn.execute("SELECT name, dim FROM embedder_meta LIMIT 1").fetchone()
+        emb_name = getattr(embedder, "name", "unknown")
+        if row and (row["name"] != emb_name or row["dim"] != embedder.dim):
+            raise ValueError(
+                f"embedder mismatch: db has {row['name']}/{row['dim']}, "
+                f"got {emb_name}/{embedder.dim}. Run `claude-mem index --reset`."
+            )
+
     all_units: list[Unit] = []
     all_relations: list[Relation] = []
     sources: dict[Path, str] = {}
@@ -83,6 +92,17 @@ def full_reindex(settings: Settings, embedder: Optional[Embedder] = None) -> dic
         repository.upsert_unit(u, embedding=embeddings.get(u.id))
     for r in all_relations:
         repository.add_relation(r)
+
+    if embedder is not None:
+        import time
+        emb_name = getattr(embedder, "name", "unknown")
+        conn.execute(
+            "INSERT OR IGNORE INTO embedder_meta(name, dim, created_at) VALUES(?, ?, ?)",
+            (emb_name, embedder.dim, int(time.time())),
+        )
+        conn.commit()
+
+    conn.close()
 
     return {
         "units_written": len(all_units),

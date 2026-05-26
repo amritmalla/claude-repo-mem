@@ -9,6 +9,7 @@ import numpy as np
 class BgeSmallEmbedder:
     """sentence-transformers/BAAI/bge-small-en-v1.5, 384-dim, CPU."""
 
+    name = "bge-small"
     dim = 384
     model_id = "BAAI/bge-small-en-v1.5"
 
