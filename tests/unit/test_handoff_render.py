@@ -1,5 +1,5 @@
-from claude_mem.handoff.render import render_handoff_markdown, HandoffPayload
-from claude_mem.tasks.model import TaskView
+from claude_repo_mem.handoff.render import render_handoff_markdown, HandoffPayload
+from claude_repo_mem.tasks.model import TaskView
 
 
 def _task(**overrides) -> TaskView:

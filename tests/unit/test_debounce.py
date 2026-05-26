@@ -1,4 +1,4 @@
-from claude_mem.watcher.debounce import PathDebouncer
+from claude_repo_mem.watcher.debounce import PathDebouncer
 
 
 def test_collects_paths_until_flush():

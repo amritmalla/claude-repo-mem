@@ -1,5 +1,5 @@
 from pathlib import Path
-from claude_mem.indexer.parsers.code_python import PythonParser
+from claude_repo_mem.indexer.parsers.code_python import PythonParser
 
 
 SAMPLE = '''\

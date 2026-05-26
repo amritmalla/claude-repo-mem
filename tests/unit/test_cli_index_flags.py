@@ -1,6 +1,6 @@
 from pathlib import Path
 from click.testing import CliRunner
-from claude_mem.cli import main
+from claude_repo_mem.cli import main
 
 
 def test_index_help_lists_embedder_and_reset():
@@ -16,7 +16,7 @@ def test_index_reset_clears_db(tmp_path: Path):
     runner = CliRunner()
     res1 = runner.invoke(main, ["index", "--root", str(tmp_path), "--no-embed"])
     assert res1.exit_code == 0, res1.output
-    db = tmp_path / ".claude-mem" / "db.sqlite"
+    db = tmp_path / ".claude-repo-mem" / "db.sqlite"
     assert db.exists()
 
     res2 = runner.invoke(main, ["index", "--root", str(tmp_path), "--no-embed", "--reset"])

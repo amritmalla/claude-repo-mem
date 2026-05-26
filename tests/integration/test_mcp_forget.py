@@ -1,10 +1,10 @@
 import json
 from pathlib import Path
 import pytest
-from claude_mem.config import Settings
-from claude_mem.db.connection import init_db
-from claude_mem.memory.writer import remember
-from claude_mem.tools.forget import handle, tool_schema
+from claude_repo_mem.config import Settings
+from claude_repo_mem.db.connection import init_db
+from claude_repo_mem.memory.writer import remember
+from claude_repo_mem.tools.forget import handle, tool_schema
 
 
 @pytest.fixture

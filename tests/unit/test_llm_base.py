@@ -1,4 +1,4 @@
-from claude_mem.llm.base import LLMClient, LLMError
+from claude_repo_mem.llm.base import LLMClient, LLMError
 
 
 def test_protocol_has_complete():

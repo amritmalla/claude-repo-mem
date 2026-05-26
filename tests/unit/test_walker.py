@@ -1,5 +1,5 @@
 from pathlib import Path
-from claude_mem.indexer.walker import walk_repo, derive_scope, hash_file
+from claude_repo_mem.indexer.walker import walk_repo, derive_scope, hash_file
 
 
 def test_walks_repo_yields_python_and_md(tmp_repo: Path):
@@ -15,7 +15,7 @@ def test_walks_repo_yields_python_and_md(tmp_repo: Path):
 def test_walks_skips_state_and_vcs(tmp_repo: Path):
     (tmp_repo / ".git").mkdir()
     (tmp_repo / ".git" / "config").write_text("x")
-    (tmp_repo / ".claude-mem" / "blob.bin").write_text("x")
+    (tmp_repo / ".claude-repo-mem" / "blob.bin").write_text("x")
     (tmp_repo / "src.py").write_text("x")
     paths = [p.relative_to(tmp_repo).as_posix() for p in walk_repo(tmp_repo)]
     assert paths == ["src.py"]

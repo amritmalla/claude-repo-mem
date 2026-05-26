@@ -1,10 +1,10 @@
-# claude-mem
+# claude-repo-mem
 
 > Durable, hierarchical, repo-scoped memory for Claude Code. Local-first MCP server.
 
-`claude-mem` indexes your repository — code, docs, and your own accumulated decisions — into a SQLite database with hybrid lexical + vector retrieval, then exposes it to Claude Code as 11 MCP tools. The point: Claude stops grepping. It calls `recall(query)` and gets back ranked, budgeted, tier-aware results in one round-trip.
+`claude-repo-mem` indexes your repository — code, docs, and your own accumulated decisions — into a SQLite database with hybrid lexical + vector retrieval, then exposes it to Claude Code as 11 MCP tools. The point: Claude stops grepping. It calls `recall(query)` and gets back ranked, budgeted, tier-aware results in one round-trip.
 
-Memory is durable. Decisions you `remember()` land as committed markdown files under `.claude-mem/memory/`. Tasks survive session boundaries via `handoff()` / `resume()`. The index keeps itself warm via a file watcher or a git post-commit hook.
+Memory is durable. Decisions you `remember()` land as committed markdown files under `.claude-repo-mem/memory/`. Tasks survive session boundaries via `handoff()` / `resume()`. The index keeps itself warm via a file watcher or a git post-commit hook.
 
 **Status:** v0.1, feature-complete. 5 development phases shipped, 255 tests passing. ~3.5k LoC of source.
 
@@ -12,7 +12,7 @@ Memory is durable. Decisions you `remember()` land as committed markdown files u
 
 ## Why
 
-LLM coding assistants spend most of their context budget rediscovering code. They grep, they read, they re-read. claude-mem replaces that with a structured index: each unit (function, class, doc section, decision) has three tiers — full source (T0), LLM summary (T2), and a single-line header (T1) — and retrieval picks the right tier to fit your budget.
+LLM coding assistants spend most of their context budget rediscovering code. They grep, they read, they re-read. claude-repo-mem replaces that with a structured index: each unit (function, class, doc section, decision) has three tiers — full source (T0), LLM summary (T2), and a single-line header (T1) — and retrieval picks the right tier to fit your budget.
 
 The retrieval substrate is a graph: routes connect to handlers (Flask / Django / Express synthesizers), Python imports become edges, React `useState` setters tag their containing components. One `trace(seed_handle)` call surfaces the connected subgraph in full source.
 
@@ -26,13 +26,11 @@ Memory is the second half. `remember(fact, scope, kind="decision")` writes a mar
 pip install claude-repo-mem
 ```
 
-> The PyPI package is `claude-repo-mem` (the short `claude-mem` name was already taken). The CLI command stays `claude-mem` and the on-disk state directory stays `.claude-mem/`. Either `claude-mem` or `claude-repo-mem` works as a CLI alias.
-
 Requires Python 3.11+. Development install:
 
 ```bash
-git clone https://github.com/amritmalla/claude-mem
-cd claude-mem
+git clone https://github.com/amritmalla/claude-repo-mem
+cd claude-repo-mem
 pip install -e ".[dev]"
 ```
 
@@ -42,8 +40,8 @@ pip install -e ".[dev]"
 
 ```bash
 cd your-repo
-claude-mem index               # build the index (downloads bge-small on first run, ~90MB)
-claude-mem doctor              # verify: units, by_layer, T2 coverage, counters
+claude-repo-mem index               # build the index (downloads bge-small on first run, ~90MB)
+claude-repo-mem doctor              # verify: units, by_layer, T2 coverage, counters
 ```
 
 To expose it to Claude Code, drop a `.mcp.json` in your repo root:
@@ -51,8 +49,8 @@ To expose it to Claude Code, drop a `.mcp.json` in your repo root:
 ```json
 {
   "mcpServers": {
-    "claude-mem": {
-      "command": "claude-mem",
+    "claude-repo-mem": {
+      "command": "claude-repo-mem",
       "args": ["serve", "--watch"]
     }
   }
@@ -64,7 +62,7 @@ Claude Code will auto-launch the server on workspace load. The `--watch` flag ru
 Prefer not to run the watcher? Install a git hook instead:
 
 ```bash
-claude-mem install-hooks       # writes .git/hooks/post-commit
+claude-repo-mem install-hooks       # writes .git/hooks/post-commit
 ```
 
 ---
@@ -79,14 +77,14 @@ All 11 tools are exposed over the MCP protocol. Group by intent:
 - `expand(handle, tier="t0"|"t2"|"t1")` — drill into one unit at a specific tier.
 
 **Memory**
-- `remember(fact, scope, kind="fact"|"decision"|"preference"|"convention", confidence?, supersedes?)` — write a durable memory entry as `.claude-mem/memory/<scope>/<slug>.md`.
+- `remember(fact, scope, kind="fact"|"decision"|"preference"|"convention", confidence?, supersedes?)` — write a durable memory entry as `.claude-repo-mem/memory/<scope>/<slug>.md`.
 - `forget(handle)` — tombstone a memory unit (frontmatter updated, file preserved).
 - `scopes()` — list known scopes with unit counts.
 
 **Tasks & continuity**
 - `plan_task(intent, parent_id?, context_handles?)` — LLM-decomposes into 2-6 independent child tasks via MCP sampling.
 - `tasks(status?, scope?, since_days?)` — list persisted tasks with filters.
-- `handoff(task_id)` — snapshot a task to `.claude-mem/handoffs/<id>.md` + write a `task_snapshot` unit.
+- `handoff(task_id)` — snapshot a task to `.claude-repo-mem/handoffs/<id>.md` + write a `task_snapshot` unit.
 - `resume(task_id, budget=4000)` — load latest snapshot + a budgeted bundle of its context handles.
 
 **Observability**
@@ -97,12 +95,12 @@ All 11 tools are exposed over the MCP protocol. Group by intent:
 ## CLI
 
 ```text
-claude-mem index [--embedder NAME] [--no-embed] [--reset]
-claude-mem serve [--watch | --no-watch]
-claude-mem doctor                              # layer counts, T2 coverage, counters
-claude-mem install-hooks [--force]             # git post-commit reindex
-claude-mem distill [--yes] [--transcript PATH] # extract durable memories from a transcript
-claude-mem bench   --fixture queries.yaml [--k 5] [--no-embed]
+claude-repo-mem index [--embedder NAME] [--no-embed] [--reset]
+claude-repo-mem serve [--watch | --no-watch]
+claude-repo-mem doctor                              # layer counts, T2 coverage, counters
+claude-repo-mem install-hooks [--force]             # git post-commit reindex
+claude-repo-mem distill [--yes] [--transcript PATH] # extract durable memories from a transcript
+claude-repo-mem bench   --fixture queries.yaml [--k 5] [--no-embed]
 ```
 
 ---
@@ -130,14 +128,14 @@ Synthesizers add cross-file edges on top of parser output:
 
 ## Embedders
 
-Default is local `bge-small` (384d, CPU). Switch via `--embedder` or `CLAUDE_MEM_EMBEDDER`:
+Default is local `bge-small` (384d, CPU). Switch via `--embedder` or `CLAUDE_REPO_MEM_EMBEDDER`:
 
 ```bash
 export OPENAI_API_KEY=sk-...
-claude-mem index --embedder openai --reset    # text-embedding-3-small, 1536d
+claude-repo-mem index --embedder openai --reset    # text-embedding-3-small, 1536d
 
 export VOYAGE_API_KEY=vy-...
-claude-mem index --embedder voyage --reset    # voyage-3-lite, 512d
+claude-repo-mem index --embedder voyage --reset    # voyage-3-lite, 512d
 ```
 
 `--reset` is required when changing embedders — the vector dimension is baked into the SQLite vec0 table at schema creation.
@@ -151,7 +149,7 @@ Tools that need an LLM (`plan_task`, summarizer backfill, distill) use MCP sampl
 For CLI tools that run outside an MCP session (`distill`), fall back to the Anthropic API by setting:
 
 ```bash
-export CLAUDE_MEM_LLM=anthropic
+export CLAUDE_REPO_MEM_LLM=anthropic
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
@@ -160,7 +158,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 ## Where things live
 
 ```
-.claude-mem/
+.claude-repo-mem/
 ├── db.sqlite              # the index (gitignored)
 ├── memory/<scope>/*.md    # remember() writes — committed source of truth
 ├── handoffs/<task>.md     # handoff() snapshots — committed, resumable
@@ -189,9 +187,9 @@ Re-indexing preserves these — they're the source of truth, the SQLite index is
 
 `plugin/skills/` ships three SKILL.md files that teach Claude when to call which tool:
 
-- `claude-mem-recall` — use BEFORE `Grep` / `Read`.
-- `claude-mem-trace` — use AFTER recall when you have a seed handle.
-- `claude-mem-handoff` — use at end of session, before context bloat.
+- `claude-repo-mem-recall` — use BEFORE `Grep` / `Read`.
+- `claude-repo-mem-trace` — use AFTER recall when you have a seed handle.
+- `claude-repo-mem-handoff` — use at end of session, before context bloat.
 
 Drop them into any Claude Code plugin tree to make the tool-use rules ambient.
 
@@ -199,7 +197,7 @@ Drop them into any Claude Code plugin tree to make the tool-use rules ambient.
 
 ## Integration with claude-full-stack-2.0
 
-The [claude-full-stack-2.0](https://github.com/amritmalla/claude-full-stack-2.0) plugin ships a `memory-management` skill that documents how to wire `claude-mem` into projects built with that workflow. See `INTEGRATION.md` and `skills/architecture/memory-management/` in that repo.
+The [claude-full-stack-2.0](https://github.com/amritmalla/claude-full-stack-2.0) plugin ships a `memory-management` skill that documents how to wire `claude-repo-mem` into projects built with that workflow. See `INTEGRATION.md` and `skills/architecture/memory-management/` in that repo.
 
 ---
 
@@ -213,13 +211,13 @@ The [claude-full-stack-2.0](https://github.com/amritmalla/claude-full-stack-2.0)
 
 **Retrieval.** Hybrid: FTS BM25 ⊕ vector cosine, reciprocally-ranked, then a budget-aware fill that picks T0 / T2 / T1 per unit to fit your token cap. Overflow handles are returned for explicit drill-in.
 
-**Memory.** Markdown files are the source of truth. The indexer treats `.claude-mem/memory/*.md` like any other docs source — parse frontmatter, derive scope, write a `memory` layer unit. `forget()` tombstones via a sentinel handle so the FK constraint is satisfied.
+**Memory.** Markdown files are the source of truth. The indexer treats `.claude-repo-mem/memory/*.md` like any other docs source — parse frontmatter, derive scope, write a `memory` layer unit. `forget()` tombstones via a sentinel handle so the FK constraint is satisfied.
 
 **Tasks.** Units of `layer=task, kind=task` with structured JSON metadata. `child_task` relations build the tree. `handoff()` renders a markdown snapshot + writes a `task_snapshot` unit pointing at it.
 
 **Watcher.** `watchdog.Observer` + a 750ms `PathDebouncer` → `incremental_reindex(paths)`. Reindex jobs run on a single-worker `BackgroundQueue` so the watcher callback never blocks.
 
-Full design in [`docs/specs/2026-05-25-claude-mem-design.md`](docs/specs/2026-05-25-claude-mem-design.md). Per-phase plans under [`docs/plans/`](docs/plans/).
+Full design in [`docs/specs/2026-05-25-claude-repo-mem-design.md`](docs/specs/2026-05-25-claude-repo-mem-design.md). Per-phase plans under [`docs/plans/`](docs/plans/).
 
 ---
 

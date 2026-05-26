@@ -1,8 +1,8 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from claude_mem.llm.mcp_sampling import McpSamplingClient
-from claude_mem.llm.base import LLMError
+from claude_repo_mem.llm.mcp_sampling import McpSamplingClient
+from claude_repo_mem.llm.base import LLMError
 
 
 @pytest.mark.asyncio

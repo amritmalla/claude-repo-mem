@@ -1,7 +1,7 @@
 import json
 import pytest
-from claude_mem.tasks.model import TaskView, task_to_unit_metadata, unit_metadata_to_task
-from claude_mem.units.model import Unit
+from claude_repo_mem.tasks.model import TaskView, task_to_unit_metadata, unit_metadata_to_task
+from claude_repo_mem.units.model import Unit
 
 
 def test_default_fields():

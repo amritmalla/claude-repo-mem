@@ -1,7 +1,7 @@
 import time
-from claude_mem.retrieval.ranker import rrf_then_rerank, RankedItem
-from claude_mem.db.repository import SearchHit
-from claude_mem.units.model import Unit
+from claude_repo_mem.retrieval.ranker import rrf_then_rerank, RankedItem
+from claude_repo_mem.db.repository import SearchHit
+from claude_repo_mem.units.model import Unit
 
 
 def _u(id, scope="x", layer="code", days_old=0, superseded=False) -> Unit:

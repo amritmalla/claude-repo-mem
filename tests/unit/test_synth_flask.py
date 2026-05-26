@@ -1,6 +1,6 @@
 from pathlib import Path
-from claude_mem.indexer.synthesizers.flask_routes import FlaskRoutesSynthesizer
-from claude_mem.indexer.parsers.code_python import PythonParser
+from claude_repo_mem.indexer.synthesizers.flask_routes import FlaskRoutesSynthesizer
+from claude_repo_mem.indexer.parsers.code_python import PythonParser
 
 
 SAMPLE = '''\

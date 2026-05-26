@@ -1,9 +1,9 @@
 from pathlib import Path
 from click.testing import CliRunner
-from claude_mem.cli import main
-from claude_mem.config import Settings
-from claude_mem.db.connection import init_db
-from claude_mem.indexer.orchestrator import full_reindex
+from claude_repo_mem.cli import main
+from claude_repo_mem.config import Settings
+from claude_repo_mem.db.connection import init_db
+from claude_repo_mem.indexer.orchestrator import full_reindex
 
 
 def test_doctor_reports_layers_and_counters(tmp_path: Path):

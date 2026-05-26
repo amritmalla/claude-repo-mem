@@ -1,9 +1,9 @@
 from pathlib import Path
 import pytest
-from claude_mem.config import Settings
-from claude_mem.db.connection import init_db, connect
-from claude_mem.db.repository import Repository
-from claude_mem.memory.writer import remember, MemoryWriteResult
+from claude_repo_mem.config import Settings
+from claude_repo_mem.db.connection import init_db, connect
+from claude_repo_mem.db.repository import Repository
+from claude_repo_mem.memory.writer import remember, MemoryWriteResult
 
 
 @pytest.fixture

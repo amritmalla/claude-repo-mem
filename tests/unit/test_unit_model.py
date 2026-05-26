@@ -1,5 +1,5 @@
 import time
-from claude_mem.units.model import Unit, Relation
+from claude_repo_mem.units.model import Unit, Relation
 
 
 def test_unit_minimal_fields():

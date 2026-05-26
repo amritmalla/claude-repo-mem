@@ -1,7 +1,10 @@
-codegraph/
-.claude-mem/
+.claude-repo-mem/
 __pycache__/
 .pytest_cache/
 dist/
+build/
 *.egg-info/
 .venv/
+.ruff_cache/
+.mypy_cache/
+*.pyc

@@ -1,7 +1,7 @@
 from pathlib import Path
 import json
 import pytest
-from claude_mem.indexer.parsers.memory_md import MemoryMarkdownParser
+from claude_repo_mem.indexer.parsers.memory_md import MemoryMarkdownParser
 
 
 SAMPLE = """\
@@ -17,8 +17,8 @@ holding the signing key.
 
 
 def test_parses_decision(tmp_path: Path):
-    (tmp_path / ".claude-mem" / "memory" / "backend" / "auth").mkdir(parents=True)
-    p = tmp_path / ".claude-mem" / "memory" / "backend" / "auth" / "rs256.md"
+    (tmp_path / ".claude-repo-mem" / "memory" / "backend" / "auth").mkdir(parents=True)
+    p = tmp_path / ".claude-repo-mem" / "memory" / "backend" / "auth" / "rs256.md"
     p.write_text(SAMPLE)
     result = MemoryMarkdownParser().parse(p, p.read_text())
     assert len(result.units) == 1
@@ -55,6 +55,6 @@ def test_missing_kind_defaults_to_fact(tmp_path: Path):
 
 def test_supports():
     p = MemoryMarkdownParser()
-    assert p.supports(Path(".claude-mem/memory/x/y.md"))
+    assert p.supports(Path(".claude-repo-mem/memory/x/y.md"))
     assert not p.supports(Path("docs/readme.md"))
     assert not p.supports(Path("x.py"))

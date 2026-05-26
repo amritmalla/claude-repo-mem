@@ -1,8 +1,8 @@
 import json
 import pytest
 from unittest.mock import AsyncMock
-from claude_mem.distill.extract import extract_memories
-from claude_mem.distill.transcript import ChatTurn
+from claude_repo_mem.distill.extract import extract_memories
+from claude_repo_mem.distill.transcript import ChatTurn
 
 
 @pytest.mark.asyncio

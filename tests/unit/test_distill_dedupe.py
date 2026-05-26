@@ -1,5 +1,5 @@
-from claude_mem.distill.extract import Proposal
-from claude_mem.distill.confirm import dedupe_proposals, group_by_scope
+from claude_repo_mem.distill.extract import Proposal
+from claude_repo_mem.distill.confirm import dedupe_proposals, group_by_scope
 
 
 def test_dedupe_collapses_near_duplicate():

@@ -2,12 +2,12 @@ from pathlib import Path
 import json
 import pytest
 from unittest.mock import AsyncMock
-from claude_mem.config import Settings
-from claude_mem.db.connection import init_db, connect
-from claude_mem.db.repository import Repository
-from claude_mem.tasks.planner import plan_task
-from claude_mem.memory.writer import remember
-from claude_mem.handoff.snapshot import handoff, SnapshotResult
+from claude_repo_mem.config import Settings
+from claude_repo_mem.db.connection import init_db, connect
+from claude_repo_mem.db.repository import Repository
+from claude_repo_mem.tasks.planner import plan_task
+from claude_repo_mem.memory.writer import remember
+from claude_repo_mem.handoff.snapshot import handoff, SnapshotResult
 
 
 @pytest.fixture
@@ -70,7 +70,7 @@ async def test_handoff_unknown_task_raises(settings):
 
 @pytest.mark.asyncio
 async def test_handoff_rejects_non_task_unit(settings):
-    from claude_mem.units.model import Unit
+    from claude_repo_mem.units.model import Unit
     repo = Repository(connect(settings.db_path))
     repo.upsert_unit(Unit(
         id="code://function/x", layer="code", kind="function", scope="x",

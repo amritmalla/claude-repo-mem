@@ -2,11 +2,11 @@ import pytest
 from pathlib import Path
 from unittest.mock import AsyncMock
 
-from claude_mem.config import Settings
-from claude_mem.db.connection import init_db, connect
-from claude_mem.indexer.orchestrator import full_reindex
-from claude_mem.queue.background import BackgroundQueue
-from claude_mem.summarizer.backfill import (
+from claude_repo_mem.config import Settings
+from claude_repo_mem.db.connection import init_db, connect
+from claude_repo_mem.indexer.orchestrator import full_reindex
+from claude_repo_mem.queue.background import BackgroundQueue
+from claude_repo_mem.summarizer.backfill import (
     enqueue_backfill,
     backfill_summaries_sync,
 )

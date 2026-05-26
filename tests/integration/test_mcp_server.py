@@ -1,6 +1,6 @@
 import pytest
 
-from claude_mem.server import build_server, SERVER_INSTRUCTIONS
+from claude_repo_mem.server import build_server, SERVER_INSTRUCTIONS
 
 
 def test_server_builds():

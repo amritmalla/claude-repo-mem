@@ -1,9 +1,9 @@
 from pathlib import Path
 import yaml
-from claude_mem.config import Settings
-from claude_mem.db.connection import init_db
-from claude_mem.indexer.orchestrator import full_reindex
-from claude_mem.bench.runner import run_benchmark, BenchResult
+from claude_repo_mem.config import Settings
+from claude_repo_mem.db.connection import init_db
+from claude_repo_mem.indexer.orchestrator import full_reindex
+from claude_repo_mem.bench.runner import run_benchmark, BenchResult
 
 
 def test_runner_reports_recall_at_k(tmp_repo: Path):

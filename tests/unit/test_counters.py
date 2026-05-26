@@ -1,4 +1,4 @@
-from claude_mem.observability.counters import reset_counters, get_counters
+from claude_repo_mem.observability.counters import reset_counters, get_counters
 
 
 def test_default_zero():

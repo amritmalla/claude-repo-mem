@@ -1,5 +1,5 @@
 from pathlib import Path
-from claude_mem.indexer.parsers.code_go import GoParser
+from claude_repo_mem.indexer.parsers.code_go import GoParser
 
 
 SAMPLE = """\

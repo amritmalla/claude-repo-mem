@@ -1,5 +1,5 @@
 from pathlib import Path
-from claude_mem.indexer.parsers.code_jsts import JsTsParser
+from claude_repo_mem.indexer.parsers.code_jsts import JsTsParser
 
 
 SAMPLE_JS = """\

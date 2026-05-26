@@ -1,4 +1,4 @@
-from claude_mem.units.headers import t1_header
+from claude_repo_mem.units.headers import t1_header
 
 
 def test_t1_for_python_function():

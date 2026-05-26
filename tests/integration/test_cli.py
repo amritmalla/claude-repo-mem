@@ -1,7 +1,7 @@
 from pathlib import Path
 from click.testing import CliRunner
 
-from claude_mem.cli import main
+from claude_repo_mem.cli import main
 
 
 def test_index_creates_state_dir(tmp_path: Path):
@@ -9,7 +9,7 @@ def test_index_creates_state_dir(tmp_path: Path):
     runner = CliRunner()
     result = runner.invoke(main, ["index", "--root", str(tmp_path), "--no-embed"])
     assert result.exit_code == 0, result.output
-    assert (tmp_path / ".claude-mem" / "db.sqlite").exists()
+    assert (tmp_path / ".claude-repo-mem" / "db.sqlite").exists()
     assert "units_written" in result.output
 
 

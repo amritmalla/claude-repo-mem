@@ -2,10 +2,10 @@ import json
 from pathlib import Path
 import pytest
 from unittest.mock import AsyncMock
-from claude_mem.config import Settings
-from claude_mem.db.connection import init_db, connect
-from claude_mem.db.repository import Repository
-from claude_mem.tasks.planner import plan_task
+from claude_repo_mem.config import Settings
+from claude_repo_mem.db.connection import init_db, connect
+from claude_repo_mem.db.repository import Repository
+from claude_repo_mem.tasks.planner import plan_task
 
 
 @pytest.fixture

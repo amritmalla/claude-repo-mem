@@ -1,4 +1,4 @@
-from claude_mem.units.ids import make_handle, parse_handle, HandleParts
+from claude_repo_mem.units.ids import make_handle, parse_handle, HandleParts
 
 
 def test_make_handle_is_deterministic():

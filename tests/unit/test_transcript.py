@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from claude_mem.distill.transcript import parse_transcript, find_latest_transcript
+from claude_repo_mem.distill.transcript import parse_transcript, find_latest_transcript
 
 
 def test_parse_simple(tmp_path: Path):

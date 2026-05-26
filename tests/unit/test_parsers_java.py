@@ -1,5 +1,5 @@
 from pathlib import Path
-from claude_mem.indexer.parsers.code_java import JavaParser
+from claude_repo_mem.indexer.parsers.code_java import JavaParser
 
 
 SAMPLE = """\

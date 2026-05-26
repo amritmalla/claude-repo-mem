@@ -1,5 +1,5 @@
 from click.testing import CliRunner
-from claude_mem.cli import main
+from claude_repo_mem.cli import main
 
 
 def test_serve_help_lists_watch_flag():

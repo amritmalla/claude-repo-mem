@@ -3,9 +3,9 @@ import numpy as np
 import pytest
 from pathlib import Path
 
-from claude_mem.db.connection import init_db, connect
-from claude_mem.db.repository import Repository
-from claude_mem.units.model import Unit, Relation
+from claude_repo_mem.db.connection import init_db, connect
+from claude_repo_mem.db.repository import Repository
+from claude_repo_mem.units.model import Unit, Relation
 
 
 @pytest.fixture

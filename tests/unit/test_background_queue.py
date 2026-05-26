@@ -1,6 +1,6 @@
 import threading
 import time
-from claude_mem.queue.background import BackgroundQueue
+from claude_repo_mem.queue.background import BackgroundQueue
 
 
 def test_submit_runs_job():

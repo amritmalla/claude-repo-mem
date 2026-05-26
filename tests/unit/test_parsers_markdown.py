@@ -1,5 +1,5 @@
 from pathlib import Path
-from claude_mem.indexer.parsers.markdown import MarkdownParser
+from claude_repo_mem.indexer.parsers.markdown import MarkdownParser
 
 
 def test_parses_simple_doc(tmp_path: Path):

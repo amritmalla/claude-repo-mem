@@ -1,6 +1,6 @@
-from claude_mem.retrieval.fill import budget_fill, FilledItem, FillResult
-from claude_mem.retrieval.ranker import RankedItem
-from claude_mem.units.model import Unit
+from claude_repo_mem.retrieval.fill import budget_fill, FilledItem, FillResult
+from claude_repo_mem.retrieval.ranker import RankedItem
+from claude_repo_mem.units.model import Unit
 
 
 def _ri(id, rank, t1="t1", t2=None, t0=None) -> RankedItem:

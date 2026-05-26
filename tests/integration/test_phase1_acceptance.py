@@ -3,11 +3,11 @@ import shutil
 from pathlib import Path
 import pytest
 
-from claude_mem.config import Settings
-from claude_mem.db.connection import init_db
-from claude_mem.indexer.orchestrator import full_reindex
-from claude_mem.tools.recall import handle as recall_handle
-from claude_mem.tools.trace import handle as trace_handle
+from claude_repo_mem.config import Settings
+from claude_repo_mem.db.connection import init_db
+from claude_repo_mem.indexer.orchestrator import full_reindex
+from claude_repo_mem.tools.recall import handle as recall_handle
+from claude_repo_mem.tools.trace import handle as trace_handle
 from tests.integration.test_recall_e2e import FakeEmbedder
 
 
@@ -18,7 +18,7 @@ FIXTURE_SRC = Path(__file__).parent / "fixtures" / "flask_app"
 def flask_repo(tmp_path: Path):
     dst = tmp_path / "flask_app"
     shutil.copytree(FIXTURE_SRC, dst)
-    (dst / ".claude-mem").mkdir()
+    (dst / ".claude-repo-mem").mkdir()
     s = Settings.for_repo(dst)
     init_db(s.db_path)
     full_reindex(s, embedder=FakeEmbedder())
@@ -60,7 +60,7 @@ async def test_trace_from_route_pulls_handler(flask_repo):
 
 
 def test_index_size_reasonable(flask_repo):
-    from claude_mem.db.connection import connect
+    from claude_repo_mem.db.connection import connect
     conn = connect(flask_repo.db_path)
     n = conn.execute("SELECT COUNT(*) FROM unit").fetchone()[0]
     # Expect at least: 5 fns (login, health, verify_user, issue_token, find_user)

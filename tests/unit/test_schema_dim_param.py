@@ -1,5 +1,5 @@
 from pathlib import Path
-from claude_mem.db.connection import init_db, connect
+from claude_repo_mem.db.connection import init_db, connect
 
 
 def test_init_db_default_creates_meta_table(tmp_path: Path):

@@ -1,9 +1,9 @@
 import pytest
 from pathlib import Path
-from claude_mem.config import Settings
-from claude_mem.db.connection import init_db, connect
-from claude_mem.db.repository import Repository
-from claude_mem.memory.writer import remember, forget, TOMBSTONE_HANDLE
+from claude_repo_mem.config import Settings
+from claude_repo_mem.db.connection import init_db, connect
+from claude_repo_mem.db.repository import Repository
+from claude_repo_mem.memory.writer import remember, forget, TOMBSTONE_HANDLE
 
 
 @pytest.fixture
@@ -34,7 +34,7 @@ def test_forget_unknown_handle_raises(settings):
 
 def test_forget_only_works_on_memory_layer(settings):
     repo = Repository(connect(settings.db_path))
-    from claude_mem.units.model import Unit
+    from claude_repo_mem.units.model import Unit
     repo.upsert_unit(Unit(
         id="code://function/a", layer="code", kind="function", scope="x",
         source_ref=None, content_hash="h", t1_header="t", created_at=0, last_seen_at=0,

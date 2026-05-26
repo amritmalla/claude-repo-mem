@@ -1,7 +1,7 @@
 from pathlib import Path
 import subprocess
 from click.testing import CliRunner
-from claude_mem.cli import main
+from claude_repo_mem.cli import main
 
 
 def _init_git(tmp_path: Path) -> None:
@@ -15,7 +15,7 @@ def test_install_hooks_writes_post_commit(tmp_path: Path):
     assert res.exit_code == 0, res.output
     hook = tmp_path / ".git" / "hooks" / "post-commit"
     assert hook.exists()
-    assert "claude-mem index" in hook.read_text()
+    assert "claude-repo-mem index" in hook.read_text()
 
 
 def test_install_hooks_refuses_to_clobber(tmp_path: Path):
@@ -38,7 +38,7 @@ def test_install_hooks_force_clobbers(tmp_path: Path):
     runner = CliRunner()
     res = runner.invoke(main, ["install-hooks", "--root", str(tmp_path), "--force"])
     assert res.exit_code == 0, res.output
-    assert "claude-mem index" in hook.read_text()
+    assert "claude-repo-mem index" in hook.read_text()
 
 
 def test_install_hooks_refuses_non_git(tmp_path: Path):

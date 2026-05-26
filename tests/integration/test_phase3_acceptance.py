@@ -4,13 +4,13 @@ from pathlib import Path
 import pytest
 from unittest.mock import AsyncMock
 
-from claude_mem.config import Settings
-from claude_mem.db.connection import init_db, connect
-from claude_mem.indexer.orchestrator import full_reindex
-from claude_mem.memory.writer import remember
-from claude_mem.tasks.planner import plan_task
-from claude_mem.handoff.snapshot import handoff
-from claude_mem.handoff.resume import resume
+from claude_repo_mem.config import Settings
+from claude_repo_mem.db.connection import init_db, connect
+from claude_repo_mem.indexer.orchestrator import full_reindex
+from claude_repo_mem.memory.writer import remember
+from claude_repo_mem.tasks.planner import plan_task
+from claude_repo_mem.handoff.snapshot import handoff
+from claude_repo_mem.handoff.resume import resume
 
 
 @pytest.mark.asyncio

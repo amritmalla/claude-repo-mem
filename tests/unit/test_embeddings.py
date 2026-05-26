@@ -1,8 +1,8 @@
 import numpy as np
 import pytest
 
-from claude_mem.embeddings.base import Embedder
-from claude_mem.embeddings.bge_small import BgeSmallEmbedder
+from claude_repo_mem.embeddings.base import Embedder
+from claude_repo_mem.embeddings.bge_small import BgeSmallEmbedder
 
 
 def test_embedder_protocol_attrs():

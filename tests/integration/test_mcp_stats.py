@@ -1,10 +1,10 @@
 import json
 import pytest
 from pathlib import Path
-from claude_mem.config import Settings
-from claude_mem.db.connection import init_db
-from claude_mem.indexer.orchestrator import full_reindex
-from claude_mem.tools.stats import handle, tool_schema
+from claude_repo_mem.config import Settings
+from claude_repo_mem.db.connection import init_db
+from claude_repo_mem.indexer.orchestrator import full_reindex
+from claude_repo_mem.tools.stats import handle, tool_schema
 
 
 @pytest.fixture

@@ -1,8 +1,8 @@
 """Phase 4 acceptance — language coverage + synthesizers."""
 from pathlib import Path
-from claude_mem.config import Settings
-from claude_mem.db.connection import init_db, connect
-from claude_mem.indexer.orchestrator import full_reindex
+from claude_repo_mem.config import Settings
+from claude_repo_mem.db.connection import init_db, connect
+from claude_repo_mem.indexer.orchestrator import full_reindex
 
 
 def test_multilang_and_synths(tmp_repo: Path):

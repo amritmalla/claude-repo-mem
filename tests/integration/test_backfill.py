@@ -1,10 +1,10 @@
 from pathlib import Path
 import pytest
 from unittest.mock import AsyncMock
-from claude_mem.config import Settings
-from claude_mem.db.connection import init_db, connect
-from claude_mem.indexer.orchestrator import full_reindex
-from claude_mem.summarizer.backfill import backfill_summaries
+from claude_repo_mem.config import Settings
+from claude_repo_mem.db.connection import init_db, connect
+from claude_repo_mem.indexer.orchestrator import full_reindex
+from claude_repo_mem.summarizer.backfill import backfill_summaries
 
 
 @pytest.mark.asyncio

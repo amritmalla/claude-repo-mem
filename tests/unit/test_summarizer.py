@@ -1,7 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock
-from claude_mem.summarizer.summarize import summarize_unit
-from claude_mem.units.model import Unit
+from claude_repo_mem.summarizer.summarize import summarize_unit
+from claude_repo_mem.units.model import Unit
 
 
 def _u(layer, kind, body):
@@ -43,7 +43,7 @@ async def test_summarize_memory_unit_returns_none():
 
 @pytest.mark.asyncio
 async def test_summarize_handles_llm_error():
-    from claude_mem.llm.base import LLMError
+    from claude_repo_mem.llm.base import LLMError
     llm = AsyncMock(); llm.complete = AsyncMock(side_effect=LLMError("nope"))
     u = _u("code", "function", "def x(): pass" + "\n# big body here " * 20)
     summary = await summarize_unit(u, llm)

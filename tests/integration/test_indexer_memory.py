@@ -1,11 +1,11 @@
 from pathlib import Path
-from claude_mem.config import Settings
-from claude_mem.db.connection import init_db, connect
-from claude_mem.indexer.orchestrator import full_reindex
+from claude_repo_mem.config import Settings
+from claude_repo_mem.db.connection import init_db, connect
+from claude_repo_mem.indexer.orchestrator import full_reindex
 
 
 def test_memory_md_indexed_as_memory_layer(tmp_repo: Path):
-    mem_dir = tmp_repo / ".claude-mem" / "memory" / "backend" / "auth"
+    mem_dir = tmp_repo / ".claude-repo-mem" / "memory" / "backend" / "auth"
     mem_dir.mkdir(parents=True)
     (mem_dir / "rs256.md").write_text(
         "---\nkind: decision\nscope: backend/auth\nconfidence: 0.9\n---\n\nWe chose RS256.\n"
@@ -25,7 +25,7 @@ def test_memory_md_indexed_as_memory_layer(tmp_repo: Path):
 
 
 def test_memory_md_not_picked_up_by_docs_parser(tmp_repo: Path):
-    mem_dir = tmp_repo / ".claude-mem" / "memory"
+    mem_dir = tmp_repo / ".claude-repo-mem" / "memory"
     mem_dir.mkdir(parents=True)
     (mem_dir / "x.md").write_text("---\nkind: fact\nscope: x\n---\n\nbody\n")
     settings = Settings.for_repo(tmp_repo)

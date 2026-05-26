@@ -1,5 +1,5 @@
 from pathlib import Path
-from claude_mem.db.connection import connect, init_db
+from claude_repo_mem.db.connection import connect, init_db
 
 
 def test_init_db_creates_file_and_tables(db_path: Path):

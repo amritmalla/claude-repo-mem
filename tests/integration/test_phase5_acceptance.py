@@ -5,14 +5,14 @@ import pytest
 from unittest.mock import AsyncMock
 import numpy as np
 
-from claude_mem.config import Settings
-from claude_mem.db.connection import init_db, connect
-from claude_mem.indexer.orchestrator import full_reindex
-from claude_mem.queue.background import BackgroundQueue
-from claude_mem.summarizer.backfill import enqueue_backfill
-from claude_mem.bench.runner import run_benchmark
-from claude_mem.distill.confirm import dedupe_proposals
-from claude_mem.distill.extract import Proposal
+from claude_repo_mem.config import Settings
+from claude_repo_mem.db.connection import init_db, connect
+from claude_repo_mem.indexer.orchestrator import full_reindex
+from claude_repo_mem.queue.background import BackgroundQueue
+from claude_repo_mem.summarizer.backfill import enqueue_backfill
+from claude_repo_mem.bench.runner import run_benchmark
+from claude_repo_mem.distill.confirm import dedupe_proposals
+from claude_repo_mem.distill.extract import Proposal
 
 
 class _FakeEmbedder:

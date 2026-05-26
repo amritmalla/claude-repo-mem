@@ -1,4 +1,4 @@
-from claude_mem.tokens import count_tokens
+from claude_repo_mem.tokens import count_tokens
 
 
 def test_empty_string():

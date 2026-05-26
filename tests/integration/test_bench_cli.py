@@ -1,10 +1,10 @@
 from pathlib import Path
 import yaml
 from click.testing import CliRunner
-from claude_mem.cli import main
-from claude_mem.config import Settings
-from claude_mem.db.connection import init_db
-from claude_mem.indexer.orchestrator import full_reindex
+from claude_repo_mem.cli import main
+from claude_repo_mem.config import Settings
+from claude_repo_mem.db.connection import init_db
+from claude_repo_mem.indexer.orchestrator import full_reindex
 
 
 def test_bench_prints_summary(tmp_path: Path):

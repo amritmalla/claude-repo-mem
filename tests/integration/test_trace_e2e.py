@@ -2,11 +2,11 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from claude_mem.config import Settings
-from claude_mem.db.connection import init_db
-from claude_mem.indexer.orchestrator import full_reindex
-from claude_mem.retrieval.recall import recall
-from claude_mem.retrieval.trace import trace
+from claude_repo_mem.config import Settings
+from claude_repo_mem.db.connection import init_db
+from claude_repo_mem.indexer.orchestrator import full_reindex
+from claude_repo_mem.retrieval.recall import recall
+from claude_repo_mem.retrieval.trace import trace
 from tests.integration.test_recall_e2e import FakeEmbedder
 
 

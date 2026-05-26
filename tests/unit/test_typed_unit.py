@@ -1,6 +1,6 @@
 import pytest
-from claude_mem.units.model import Unit
-from claude_mem.units.typed import metadata_json, with_metadata, KIND_VALID_FOR_LAYER
+from claude_repo_mem.units.model import Unit
+from claude_repo_mem.units.typed import metadata_json, with_metadata, KIND_VALID_FOR_LAYER
 
 
 def _u(**overrides) -> Unit:
