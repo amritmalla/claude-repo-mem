@@ -2387,7 +2387,7 @@ class ImportsSynthesizer:
         for u in units:
             if u.layer != "code" or not u.source_ref:
                 continue
-            file_part = u.source_ref.split(":", 1)[0]
+            file_part = u.source_ref.rsplit(":", 1)[0]
             by_file[Path(file_part)].append(u)
 
         # Pick a representative unit per file for the edge target (the parent
@@ -2604,7 +2604,7 @@ class FlaskRoutesSynthesizer:
         handlers: dict[tuple[str, str], Unit] = {}
         for u in units:
             if u.layer == "code" and u.kind in ("function", "method") and u.source_ref:
-                file = u.source_ref.split(":", 1)[0]
+                file = u.source_ref.rsplit(":", 1)[0]
                 # qualname is stored in t1_header as `python <name>(...)`
                 m = re.match(r"\w+ (\S+?)\(", u.t1_header)
                 if m:
