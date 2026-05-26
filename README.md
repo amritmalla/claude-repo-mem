@@ -2,7 +2,7 @@
 
 Contextual memory and retrieval engine for Claude Code. Local-first MCP server that gives Claude durable project memory and hierarchical retrieval over a single repo's code, docs, and prior decisions.
 
-**Status:** Phase 2 — memory, summaries, tasks, distillation. Handoff and resume land in Phase 3.
+**Status:** Phase 3 — handoff, resume, file watcher, companion skills. Phase 4 is polish.
 
 ## Install
 
@@ -16,7 +16,8 @@ pip install -e ".[dev]"
 cd your-repo
 claude-mem index                # full reindex
 claude-mem doctor               # show index size
-claude-mem serve                # run MCP server on stdio
+claude-mem serve --watch        # MCP server with background incremental reindexing (default)
+claude-mem serve --no-watch     # MCP server, no file watcher
 claude-mem distill --yes        # extract durable memories from latest session
 ```
 
@@ -37,8 +38,15 @@ Phase 2 (memory, tasks, observability):
 - `plan_task(intent)` — LLM-decomposes a task into 2-6 independent child tasks
 - `tasks(status?, scope?)` — list persisted tasks
 
+Phase 3 (continuity):
+- `handoff(task_id)` — snapshot a task to `.claude-mem/handoffs/<id>.md` and create a `task_snapshot` unit
+- `resume(task_id, budget=4000)` — load the latest snapshot + a budgeted bundle of its context handles
+
 LLM access uses MCP sampling by default (`CLAUDE_MEM_LLM=mcp`). For the CLI `distill`
 command, set `ANTHROPIC_API_KEY` to use the Anthropic API directly.
+
+Companion skills are shipped in `plugin/skills/` — `claude-mem-recall`, `claude-mem-trace`,
+`claude-mem-handoff` — telling Claude when to reach for these tools.
 
 ## Architecture
 

@@ -102,10 +102,28 @@ def _make_cli_llm():
 
 
 @main.command()
-def serve() -> None:
+@click.option("--root", type=click.Path(file_okay=False, path_type=Path),
+              default=None, help="Repo root (defaults to cwd)")
+@click.option("--watch/--no-watch", default=True,
+              help="Run a file watcher in the background (default on)")
+def serve(root: Path | None, watch: bool) -> None:
     """Run the MCP server on stdio."""
-    from .server import serve_stdio
-    asyncio.run(serve_stdio())
+    repo_root = root or Path.cwd()
+    settings = Settings.for_repo(repo_root)
+    init_db(settings.db_path)
+
+    watcher = None
+    if watch:
+        from .watcher.fs_watcher import FileWatcher
+        watcher = FileWatcher(settings, embedder=None)
+        watcher.start()
+
+    try:
+        from .server import serve_stdio
+        asyncio.run(serve_stdio())
+    finally:
+        if watcher is not None:
+            watcher.stop()
 
 
 if __name__ == "__main__":
