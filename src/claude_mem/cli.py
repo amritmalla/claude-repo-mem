@@ -82,6 +82,29 @@ def doctor(root: Path | None) -> None:
     click.echo(f"counters: {counters}")
 
 
+@main.command()
+@click.option("--root", type=click.Path(file_okay=False, path_type=Path), default=None)
+@click.option("--fixture", type=click.Path(dir_okay=False, exists=True, path_type=Path), required=True)
+@click.option("--k", type=int, default=5)
+@click.option("--no-embed", is_flag=True, default=False, help="FTS-only (skip vector search)")
+def bench(root: Path | None, fixture: Path, k: int, no_embed: bool) -> None:
+    """Run a recall benchmark against a YAML fixture of (query, expected) pairs."""
+    repo_root = root or Path.cwd()
+    settings = Settings.for_repo(repo_root)
+    from .bench.runner import run_benchmark
+    emb = None
+    if not no_embed:
+        from .embeddings.factory import make_embedder
+        emb = make_embedder()
+    result = run_benchmark(settings, fixture, embedder=emb, k=k)
+    click.echo(f"fixture: {fixture}")
+    click.echo(f"queries: {result.total}")
+    click.echo(f"recall@{k}: {result.hits_at_k}/{result.total} ({result.recall_at_k:.2%})")
+    if result.p95_latency_ms:
+        click.echo(f"p50_latency_ms: {result.p50_latency_ms:.1f}")
+        click.echo(f"p95_latency_ms: {result.p95_latency_ms:.1f}")
+
+
 @main.command("install-hooks")
 @click.option("--root", type=click.Path(file_okay=False, path_type=Path), default=None)
 @click.option("--force", is_flag=True, default=False)

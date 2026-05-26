@@ -2,7 +2,7 @@
 
 Contextual memory and retrieval engine for Claude Code. Local-first MCP server that gives Claude durable project memory and hierarchical retrieval over a single repo's code, docs, and prior decisions.
 
-**Status:** Phase 4 — Java/Go/Rust parsers, Django/Express/React synthesizers, install-hooks, background queue.
+**Status:** Phase 5 — pluggable embedders, queue-driven summarization, bench harness, distill UX. All deferrals closed.
 
 ## Install
 
@@ -21,6 +21,9 @@ claude-mem serve --no-watch     # MCP server, no file watcher
 claude-mem install-hooks        # post-commit reindex (alternative to --watch)
 claude-mem doctor               # diagnostics: layer counts, T2 coverage, counters
 claude-mem distill --yes        # extract durable memories from latest session
+claude-mem index --embedder openai      # use OpenAI embeddings (1536d, requires --reset)
+claude-mem index --embedder voyage      # use Voyage embeddings (512d, requires --reset)
+claude-mem bench --fixture queries.yaml # recall@k benchmark from YAML
 ```
 
 Connect Claude Code to the server via your MCP config.
@@ -52,6 +55,11 @@ Companion skills are shipped in `plugin/skills/` — `claude-mem-recall`, `claud
 
 Languages indexed: Python, JavaScript, TypeScript, Markdown, Java, Go, Rust.
 Synthesizers: Flask / Django / Express routes, Python imports, React `useState` hooks.
+
+Embedders (`CLAUDE_MEM_EMBEDDER` or `--embedder`): `bge-small` (local, 384d, default),
+`openai` (1536d, needs `OPENAI_API_KEY`), `voyage` (512d, needs `VOYAGE_API_KEY`).
+Switching embedders requires `claude-mem index --reset` because the vector
+dimension is baked into the SQLite schema.
 
 ## Architecture
 

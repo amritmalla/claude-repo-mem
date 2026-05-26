@@ -1,13 +1,46 @@
 from __future__ import annotations
 
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Optional
 
 from ..config import Settings
 from ..llm.base import LLMClient
 from ..memory.writer import remember, MemoryWriteResult
-from .extract import Proposal, extract_memories
+from .extract import Proposal, extract_memories, proposal_dedupe_key
 from .transcript import find_latest_transcript, parse_transcript
+
+
+def dedupe_proposals(proposals: list[Proposal], threshold: float = 0.85) -> list[Proposal]:
+    """Collapse near-duplicate proposals (same scope, ratio >= threshold).
+
+    Higher-confidence proposals win. Proposals in different scopes never dedupe.
+    """
+    out: list[Proposal] = []
+    for p in sorted(proposals, key=lambda x: -x.confidence):
+        is_dup = False
+        for kept in out:
+            if kept.scope != p.scope:
+                continue
+            ratio = SequenceMatcher(
+                None, proposal_dedupe_key(kept), proposal_dedupe_key(p)
+            ).ratio()
+            if ratio >= threshold:
+                is_dup = True
+                break
+        if not is_dup:
+            out.append(p)
+    return out
+
+
+def group_by_scope(proposals: list[Proposal]) -> dict[str, list[Proposal]]:
+    """Group proposals by scope; within each scope sort by confidence desc."""
+    groups: dict[str, list[Proposal]] = {}
+    for p in proposals:
+        groups.setdefault(p.scope, []).append(p)
+    for k in groups:
+        groups[k].sort(key=lambda p: -p.confidence)
+    return groups
 
 
 async def run_distill(
@@ -28,6 +61,7 @@ async def run_distill(
 
     turns = parse_transcript(path)
     proposals = await extract_memories(turns, llm)
+    proposals = dedupe_proposals(proposals)
 
     written: list[MemoryWriteResult] = []
     for p in proposals:

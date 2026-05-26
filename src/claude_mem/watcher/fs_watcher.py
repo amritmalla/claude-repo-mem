@@ -25,9 +25,11 @@ class FileWatcher:
         embedder: Optional[Embedder] = None,
         quiet_ms: int = 750,
         queue: Optional[BackgroundQueue] = None,
+        llm=None,
     ) -> None:
         self.settings = settings
         self.embedder = embedder
+        self.llm = llm
         self._lock = threading.Lock()
         self._debouncer = PathDebouncer(
             on_flush=self._on_flush, quiet_ms=quiet_ms,
@@ -84,12 +86,19 @@ class FileWatcher:
         paths_list = [Path(p) for p in paths]
         settings = self.settings
         embedder = self.embedder
+        llm = self.llm
 
         def job():
             try:
                 incremental_reindex(settings, paths_list, embedder=embedder)
             except Exception as e:  # pragma: no cover — defensive
                 print(f"[claude-mem watcher] reindex failed: {e}", file=sys.stderr)
+            if llm is not None:
+                try:
+                    from ..summarizer.backfill import backfill_summaries_sync
+                    backfill_summaries_sync(settings, llm=llm, limit=50)
+                except Exception as e:  # pragma: no cover — defensive
+                    print(f"[claude-mem watcher] backfill failed: {e}", file=sys.stderr)
 
         self._queue.submit(job)
 

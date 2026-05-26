@@ -71,3 +71,23 @@ async def extract_memories(turns: list[ChatTurn], llm: LLMClient) -> list[Propos
             kind = "fact"
         out.append(Proposal(fact=fact, scope=scope, kind=kind, confidence=conf_f))
     return out
+
+
+import re as _re
+
+
+_STOP = {"a", "an", "the", "is", "are", "was", "were", "be", "been", "to", "for",
+         "of", "in", "on", "we", "you", "i", "it", "this", "that", "use", "used",
+         "uses", "using", "and", "or", "but", "so", "as", "by", "with"}
+
+
+def proposal_dedupe_key(p: Proposal) -> str:
+    """Order-insensitive normalized fingerprint for fuzzy duplicate detection.
+
+    Stems tokens to their first 4 chars and drops stopwords so that
+    "We use RS256 for JWT signing." and "RS256 is used to sign JWTs."
+    produce overlapping keys.
+    """
+    text = _re.sub(r"[^\w\s]", " ", p.fact.lower())
+    tokens = [t[:4] for t in text.split() if t not in _STOP and len(t) > 1]
+    return f"{p.scope}::" + " ".join(sorted(set(tokens)))
