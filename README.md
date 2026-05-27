@@ -12,13 +12,7 @@
 pip install claude-repo-mem
 ```
 
-Requires Python 3.11+. Development install:
-
-```bash
-git clone https://github.com/amritmalla/claude-repo-mem
-cd claude-repo-mem
-pip install -e ".[dev]"
-```
+Requires Python 3.11+.
 
 ---
 
@@ -84,26 +78,6 @@ Synthesizers add cross-file edges on top of parser output:
 - **Express** `app.METHOD(url, handler)` → same-file handler.
 - **Python imports** → cross-module edges.
 - **React hooks** — `useState` setter calls emit `mutates_state_of` edges on the containing component.
-
----
-
-## Development
-
-```bash
-pip install -e ".[dev]"
-pytest                    # 255 fast tests
-pytest -m slow            # +5 slow tests (real watchdog FS events)
-```
-
-Phase tags mark each shipped milestone:
-
-| Tag | Scope |
-|---|---|
-| `phase-1-complete` | Substrate, parsers, hybrid retrieval, `recall` / `trace` / `expand` |
-| `phase-2-complete` | Memory layer, `remember` / `forget` / `scopes` / `stats` / `plan_task` / `tasks`, distillation |
-| `phase-3-complete` | `handoff` / `resume`, file watcher, companion skills |
-| `phase-4-complete` | Java / Go / Rust parsers, Django / Express / React synthesizers, install-hooks, background queue |
-| `phase-5-complete` | Pluggable embedders (OpenAI / Voyage), queue-driven summarization, bench harness, distill UX |
 
 ---
 
