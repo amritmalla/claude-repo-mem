@@ -199,6 +199,8 @@ Drop them into any Claude Code plugin tree to make the tool-use rules ambient.
 
 The [claude-full-stack-2.0](https://github.com/amritmalla/claude-full-stack-2.0) plugin ships a `memory-management` skill that documents how to wire `claude-repo-mem` into projects built with that workflow. See `INTEGRATION.md` and `skills/architecture/memory-management/` in that repo.
 
+That project also publishes a sibling PyPI package, [`claude-full-stack-skills`](https://pypi.org/p/claude-full-stack-skills), which exposes its 83 architecture/implementation skills as MCP tools for **Claude Desktop**. The two packages compose: install `claude-repo-mem` for repo memory + retrieval, and `claude-full-stack-skills` for the engineering skill catalog.
+
 ---
 
 ## How it works
@@ -243,4 +245,6 @@ Phase tags mark each shipped milestone:
 
 ## License
 
-MIT.
+MIT. See [`LICENSE`](LICENSE).
+
+Release notes for each version live in [`CHANGELOG.md`](CHANGELOG.md).
