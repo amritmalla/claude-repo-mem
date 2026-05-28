@@ -183,8 +183,15 @@ def _make_cli_llm():
               help="Run a file watcher in the background (default on)")
 def serve(root: Path | None, watch: bool) -> None:
     """Run the MCP server on stdio."""
-    repo_root = root or Path.cwd()
-    settings = Settings.for_repo(repo_root)
+    if root is not None:
+        settings = Settings.for_repo(root)
+    else:
+        try:
+            settings = Settings.discover()
+        except FileNotFoundError as e:
+            raise click.ClickException(
+                str(e) + "\nTip: pass --root <repo-path> or run `claude-repo-mem init` first."
+            )
     init_db(settings.db_path)
 
     watcher = None
