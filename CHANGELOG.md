@@ -5,6 +5,14 @@ All notable changes to `claude-repo-mem` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and the
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.2] — 2026-05-28
+
+### Added
+- Added `.mcp.json` configuration file at the repository root for client auto-wiring.
+
+### Changed
+- Modified `serve` command to automatically discover the repository root if no `--root` path is provided, instead of defaulting to `Path.cwd()`.
+
 ## [0.1.1] — 2026-05-27
 
 ### Documentation
@@ -71,5 +79,6 @@ Framework-aware cross-file edges:
 - `plugin/skills/claude-repo-mem-trace/`
 - `plugin/skills/claude-repo-mem-handoff/`
 
+[0.1.2]: https://github.com/amritmalla/claude-repo-mem/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/amritmalla/claude-repo-mem/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/amritmalla/claude-repo-mem/releases/tag/v0.1.0
