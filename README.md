@@ -31,13 +31,15 @@ To expose it to Claude Code, drop a `.mcp.json` in your repo root:
   "mcpServers": {
     "claude-repo-mem": {
       "command": "claude-repo-mem",
-      "args": ["serve", "--watch"]
+      "args": ["serve", "--watch", "--root", "/absolute/path/to/your-repo"]
     }
   }
 }
 ```
 
 Claude Code will auto-launch the server on workspace load. The `--watch` flag runs an incremental file watcher (debounced 750ms) so the index stays current as you edit.
+
+> Set `--root` to your repo's absolute path. Claude Code launches MCP servers from a system working directory (not your repo), so without `--root` the server's auto-discovery can't find the index and recall comes back empty. See [docs/usage.md](docs/usage.md#wire-into-claude-code).
 
 Prefer not to run the watcher? Install a git hook instead:
 
