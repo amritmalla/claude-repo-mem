@@ -6,6 +6,19 @@
 
 ---
 
+## Why claude-repo-mem
+
+Working with an AI agent in a real codebase runs into the same friction every session:
+
+- **Context burns fast.** Native `Read`/`Grep` pull whole files into the window to answer narrow questions. `recall` returns ranked, summarized, scoped results inside a token budget — full source for the top hits, summaries for the rest — so you spend context on what matters.
+- **Following code flow is expensive.** Chasing a caller → handler → route by hand means repeated reads. `trace` walks the relation graph from a seed and returns the connected source in one round-trip.
+- **Nothing carries across sessions.** Decisions, conventions, and the "why" behind the code evaporate when the conversation ends. `remember`, `handoff`, and `resume` persist durable memory and task state as git-trackable markdown.
+- **It stays on your machine.** Everything lives in a single `.claude-repo-mem/` directory with a local embedding model by default — no code leaves the repo, no API key required.
+
+The result: the agent treats your repo as the authoritative source for its own structure and history, instead of rediscovering it file-by-file each time.
+
+---
+
 ## Install
 
 ```bash
