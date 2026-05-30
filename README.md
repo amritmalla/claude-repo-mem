@@ -81,6 +81,17 @@ Synthesizers add cross-file edges on top of parser output:
 
 ---
 
+## Documentation
+
+Full documentation lives in [`docs/`](docs/):
+
+- [Usage guide](docs/usage.md) — indexing, Claude Code setup, configuration, workflows, troubleshooting.
+- [Tool reference](docs/tools.md) — the 11 MCP tools, their parameters and returns.
+- [Architecture](docs/architecture.md) — how indexing, storage, and retrieval work.
+- [Contributing](CONTRIBUTING.md) — dev setup, tests, and release flow.
+
+---
+
 ## License
 
 MIT. See [`LICENSE`](LICENSE).
