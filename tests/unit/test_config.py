@@ -35,6 +35,51 @@ def test_settings_raises_when_not_in_repo(tmp_path: Path, monkeypatch):
         Settings.discover()
 
 
+def test_settings_uses_claude_project_dir_fallback(tmp_repo: Path, tmp_path: Path, monkeypatch):
+    # Launched from a directory with no .claude-repo-mem in its ancestry
+    # (simulating C:\Windows\System32), but CLAUDE_PROJECT_DIR points at the repo.
+    elsewhere = tmp_path / "system32"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    monkeypatch.delenv("CLAUDE_REPO_MEM_ROOT", raising=False)
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_repo))
+    s = Settings.discover()
+    assert s.repo_root == tmp_repo
+
+
+def test_settings_uses_explicit_root_env_override(tmp_repo: Path, tmp_path: Path, monkeypatch):
+    elsewhere = tmp_path / "system32"
+    elsewhere.mkdir()
+    monkeypatch.chdir(elsewhere)
+    monkeypatch.setenv("CLAUDE_REPO_MEM_ROOT", str(tmp_repo))
+    s = Settings.discover()
+    assert s.repo_root == tmp_repo
+
+
+def test_explicit_root_takes_precedence_over_cwd(tmp_path: Path, monkeypatch):
+    # Two initialized repos: cwd-discoverable one and an explicitly-pinned one.
+    cwd_repo = tmp_path / "cwd_repo"
+    (cwd_repo / ".claude-repo-mem").mkdir(parents=True)
+    pinned_repo = tmp_path / "pinned_repo"
+    (pinned_repo / ".claude-repo-mem").mkdir(parents=True)
+    monkeypatch.chdir(cwd_repo)
+    monkeypatch.setenv("CLAUDE_REPO_MEM_ROOT", str(pinned_repo))
+    s = Settings.discover()
+    assert s.repo_root == pinned_repo
+
+
+def test_cwd_takes_precedence_over_project_dir(tmp_path: Path, monkeypatch):
+    cwd_repo = tmp_path / "cwd_repo"
+    (cwd_repo / ".claude-repo-mem").mkdir(parents=True)
+    other_repo = tmp_path / "other_repo"
+    (other_repo / ".claude-repo-mem").mkdir(parents=True)
+    monkeypatch.chdir(cwd_repo)
+    monkeypatch.delenv("CLAUDE_REPO_MEM_ROOT", raising=False)
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(other_repo))
+    s = Settings.discover()
+    assert s.repo_root == cwd_repo
+
+
 def test_embedder_env_override(tmp_repo: Path, monkeypatch):
     monkeypatch.chdir(tmp_repo)
     monkeypatch.setenv("CLAUDE_REPO_MEM_EMBED", "openai:text-embedding-3-small")

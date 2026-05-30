@@ -44,7 +44,7 @@ To expose it to Claude Code, drop a `.mcp.json` in your repo root:
   "mcpServers": {
     "claude-repo-mem": {
       "command": "claude-repo-mem",
-      "args": ["serve", "--watch", "--root", "/absolute/path/to/your-repo"]
+      "args": ["serve", "--watch"]
     }
   }
 }
@@ -52,7 +52,7 @@ To expose it to Claude Code, drop a `.mcp.json` in your repo root:
 
 Claude Code will auto-launch the server on workspace load. The `--watch` flag runs an incremental file watcher (debounced 750ms) so the index stays current as you edit.
 
-> Set `--root` to your repo's absolute path. Claude Code launches MCP servers from a system working directory (not your repo), so without `--root` the server's auto-discovery can't find the index and recall comes back empty. See [docs/usage.md](docs/usage.md#wire-into-claude-code).
+> No path needed under Claude Code: it injects `CLAUDE_PROJECT_DIR` into the server's environment, which the server uses to locate the index even though MCP servers are launched from a system working directory rather than your repo. Under a different MCP host that doesn't set `CLAUDE_PROJECT_DIR`, pin the repo with `"--root", "/abs/path"` or the `CLAUDE_REPO_MEM_ROOT` env var. See [docs/usage.md](docs/usage.md#wire-into-claude-code).
 
 Prefer not to run the watcher? Install a git hook instead:
 

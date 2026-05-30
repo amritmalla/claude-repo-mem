@@ -5,6 +5,17 @@ All notable changes to `claude-repo-mem` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and the
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.1.3] — 2026-05-30
+
+### Added
+- Root resolution now falls back to the `CLAUDE_PROJECT_DIR` environment variable
+  that Claude Code injects into spawned MCP servers, so `.mcp.json` no longer needs
+  an explicit `--root` under Claude Code (fixes recall failing when the host launches
+  the server from a system directory such as `C:\Windows\System32`).
+- Added a `CLAUDE_REPO_MEM_ROOT` environment variable to pin the repo root
+  explicitly; it takes precedence over cwd discovery and the `CLAUDE_PROJECT_DIR`
+  fallback. Resolution order: `CLAUDE_REPO_MEM_ROOT` → walk up from cwd → `CLAUDE_PROJECT_DIR`.
+
 ## [0.1.2] — 2026-05-28
 
 ### Added

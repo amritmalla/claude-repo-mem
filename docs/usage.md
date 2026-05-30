@@ -48,7 +48,7 @@ Drop a `.mcp.json` in your repo root:
   "mcpServers": {
     "claude-repo-mem": {
       "command": "claude-repo-mem",
-      "args": ["serve", "--watch", "--root", "/absolute/path/to/your-repo"]
+      "args": ["serve", "--watch"]
     }
   }
 }
@@ -57,12 +57,34 @@ Drop a `.mcp.json` in your repo root:
 Claude Code auto-launches the server on workspace load. After editing `.mcp.json`,
 reconnect the server (restart Claude Code, or use `/mcp` → reconnect).
 
-> **Why `--root`?** Claude Code launches MCP servers from a system working
-> directory (e.g. `C:\Windows\System32` on Windows), *not* your repo. Without
-> `--root`, the server's auto-discovery walks up from that system directory, finds
-> no `.claude-repo-mem/`, and comes up empty. Pinning `--root` to the repo's
-> absolute path makes the server resolve the correct index regardless of where it
-> was launched. See [Troubleshooting](#troubleshooting).
+No path is required: Claude Code injects `CLAUDE_PROJECT_DIR` (the repo it was
+opened in) into the spawned server's environment, and the server uses it to locate
+`.claude-repo-mem/` even though the host launches MCP servers from a system working
+directory (e.g. `C:\Windows\System32` on Windows) rather than your repo.
+
+### Pinning the root explicitly
+
+Root resolution tries, in order:
+
+1. **`CLAUDE_REPO_MEM_ROOT`** — an explicit override (env var or `.mcp.json` `env`).
+2. **Walk up from the working directory** looking for `.claude-repo-mem/`.
+3. **`CLAUDE_PROJECT_DIR`** — the project root Claude Code injects.
+
+The `CLAUDE_PROJECT_DIR` fallback covers Claude Code automatically. Pin the root
+explicitly when running under a different MCP host (Cursor, etc.) that does not set
+`CLAUDE_PROJECT_DIR`, or to point at a repo other than the one you opened — either
+with the `--root` flag:
+
+```json
+"args": ["serve", "--watch", "--root", "/absolute/path/to/your-repo"]
+```
+
+or with the `CLAUDE_REPO_MEM_ROOT` environment variable (which also accepts
+`.mcp.json` variable expansion):
+
+```json
+"env": { "CLAUDE_REPO_MEM_ROOT": "${CLAUDE_PROJECT_DIR:-.}" }
+```
 
 The `--watch` flag runs an incremental file watcher (debounced 750ms) so the index
 stays current as you edit. Prefer not to run a watcher? Install a git hook instead:
@@ -134,7 +156,7 @@ Snapshots are markdown under `.claude-repo-mem/handoffs/` and are git-trackable.
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| Recall returns nothing; server seems to look in `C:\Windows\System32` or another system dir | Server launched without `--root`; auto-discovery ran from the host's working directory | Add `"--root", "/abs/path/to/repo"` to `.mcp.json` args and reconnect the server. Verify with `claude-repo-mem doctor --root /abs/path`. |
+| Recall returns nothing; server seems to look in `C:\Windows\System32` or another system dir | Host (e.g. a non-Claude-Code MCP client) launched the server from its working directory and did not set `CLAUDE_PROJECT_DIR` | Pin the repo: add `"--root", "/abs/path/to/repo"` to `.mcp.json` args (or set `CLAUDE_REPO_MEM_ROOT`) and reconnect. Verify with `claude-repo-mem doctor --root /abs/path`. |
 | Empty or stale results after big changes | Index out of date | Re-run `claude-repo-mem index` (or `--reset`), or enable `--watch` / `install-hooks`. |
 | Long pause on first `index` | One-time `bge-small` model download (~90MB) | Wait for the first run; subsequent runs are fast. |
 | `doctor` shows low `t2_coverage` right after indexing | Summaries backfill asynchronously and need an LLM backend | Let summarization catch up; ensure an LLM backend is configured. |

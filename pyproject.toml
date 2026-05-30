@@ -1,6 +1,6 @@
 [project]
 name = "claude-repo-mem"
-version = "0.1.2"
+version = "0.1.3"
 description = "Durable, hierarchical, repo-scoped memory for Claude Code. Local-first MCP server with hybrid lexical + vector retrieval over your codebase, docs, and accumulated decisions."
 readme = "README.md"
 requires-python = ">=3.11"

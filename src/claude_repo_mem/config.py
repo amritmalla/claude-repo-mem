@@ -20,13 +20,34 @@ class Settings:
 
     @classmethod
     def discover(cls, start: Path | None = None) -> "Settings":
+        # 1. Explicit override always wins.
+        explicit = os.environ.get("CLAUDE_REPO_MEM_ROOT")
+        if explicit:
+            root = Path(explicit).resolve()
+            if (root / STATE_DIRNAME).is_dir():
+                return cls._build(root)
+
+        # 2. Walk up from the working directory.
         cwd = (start or Path.cwd()).resolve()
         for candidate in [cwd, *cwd.parents]:
             if (candidate / STATE_DIRNAME).is_dir():
                 return cls._build(candidate)
+
+        # 3. Fall back to the project root Claude Code injects into the
+        #    spawned MCP server's environment. This handles the common case
+        #    where the host launches the server from a system directory
+        #    (e.g. C:\Windows\System32) rather than the repo.
+        project = os.environ.get("CLAUDE_PROJECT_DIR")
+        if project:
+            root = Path(project).resolve()
+            if (root / STATE_DIRNAME).is_dir():
+                return cls._build(root)
+
         raise FileNotFoundError(
-            f"No {STATE_DIRNAME}/ directory found in {cwd} or any parent. "
-            "Run `claude-repo-mem init` first."
+            f"No {STATE_DIRNAME}/ directory found in {cwd} or any parent "
+            "(and neither CLAUDE_REPO_MEM_ROOT nor CLAUDE_PROJECT_DIR points "
+            "to an initialized repo). Run `claude-repo-mem init` first, or pass "
+            "--root <repo-path>."
         )
 
     @classmethod
