@@ -225,6 +225,8 @@ Snapshots are markdown under `.claude-repo-mem/handoffs/` and are git-trackable.
 | Long pause on first `index` | One-time `bge-small` model download (~90MB) | Wait for the first run; subsequent runs are fast. |
 | `doctor` shows low `t2_coverage` right after indexing | Summaries backfill asynchronously and need an LLM backend | Let summarization catch up; ensure an LLM backend is configured. |
 | `OPENAI_API_KEY not set` / `VOYAGE_API_KEY not set` | Selected a remote embedder without its key | Set the key, or switch back to `bge-small`. |
+| Claude Desktop shows the server as failed / "disconnected" | A bare `claude-repo-mem` command isn't on Desktop's `PATH` | Use `claude-repo-mem init --target desktop`, which resolves and bakes in the absolute executable path; then fully restart Desktop. |
+| `init` errors with `... already has a 'claude-repo-mem' entry that differs` | An existing config entry doesn't match what `init` would write | Re-run with `--force` to overwrite it, or edit the entry by hand. |
 
 ## CLI summary
 

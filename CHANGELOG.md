@@ -5,16 +5,37 @@ All notable changes to `claude-repo-mem` are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and the
 project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- New `claude-repo-mem init` command: scaffolds `.claude-repo-mem/` and writes or
+  merges a `claude-repo-mem` entry into the repo's `.mcp.json` in one step. The
+  merge preserves any other `mcpServers` entries and refuses to overwrite a
+  differing `claude-repo-mem` entry without `--force`. Optional `--index` runs the
+  first index, `--hooks` installs the post-commit git hook, and `--embedder` /
+  `--no-watch` are baked into the generated `serve` args.
+- `init --target desktop` writes to Claude Desktop's global config instead of the
+  project `.mcp.json`. The server is keyed by folder name (e.g.
+  `claude-repo-mem-myrepo`) so multiple repos coexist, and the absolute path to the
+  `claude-repo-mem` executable is resolved and baked in so Desktop always finds it.
+
+### Fixed
+- Config merging now reads existing files with `utf-8-sig`, so a `.mcp.json` saved
+  with a UTF-8 BOM (common on Windows editors) is accepted instead of rejected as
+  invalid JSON.
+
 ## [0.1.3] — 2026-05-30
 
 ### Added
-- Root resolution now falls back to the `CLAUDE_PROJECT_DIR` environment variable
-  that Claude Code injects into spawned MCP servers, so `.mcp.json` no longer needs
-  an explicit `--root` under Claude Code (fixes recall failing when the host launches
-  the server from a system directory such as `C:\Windows\System32`).
 - Added a `CLAUDE_REPO_MEM_ROOT` environment variable to pin the repo root
-  explicitly; it takes precedence over cwd discovery and the `CLAUDE_PROJECT_DIR`
-  fallback. Resolution order: `CLAUDE_REPO_MEM_ROOT` → walk up from cwd → `CLAUDE_PROJECT_DIR`.
+  explicitly without the `--root` flag (useful under MCP hosts that only expose an
+  `env` block).
+- Root resolution now also falls back to `CLAUDE_PROJECT_DIR` when set, for hosts
+  that inject it. Note: current Claude Code builds do **not** set `CLAUDE_PROJECT_DIR`
+  for spawned MCP servers nor advertise the MCP `roots` capability, so an explicit
+  root (`--root` or `CLAUDE_REPO_MEM_ROOT`) remains required there.
+- Full resolution order: `--root` flag → `CLAUDE_REPO_MEM_ROOT` → walk up from cwd
+  → `CLAUDE_PROJECT_DIR`.
 
 ## [0.1.2] — 2026-05-28
 
