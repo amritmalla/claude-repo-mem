@@ -105,12 +105,12 @@ def bench(root: Path | None, fixture: Path, k: int, no_embed: bool) -> None:
         click.echo(f"p95_latency_ms: {result.p95_latency_ms:.1f}")
 
 
-@main.command("install-hooks")
-@click.option("--root", type=click.Path(file_okay=False, path_type=Path), default=None)
-@click.option("--force", is_flag=True, default=False)
-def install_hooks(root: Path | None, force: bool) -> None:
-    """Install a post-commit hook that runs `claude-repo-mem index --no-embed`."""
-    repo_root = root or Path.cwd()
+def _write_post_commit_hook(repo_root: Path, force: bool) -> Path:
+    """Write a post-commit hook that reindexes. Returns the hook path.
+
+    Raises click.ClickException if not a git repo or the hook exists
+    without --force.
+    """
     git_dir = repo_root / ".git"
     if not git_dir.is_dir():
         raise click.ClickException(f"not a git repo: {repo_root}")
@@ -131,6 +131,16 @@ def install_hooks(root: Path | None, force: bool) -> None:
         hook_path.chmod(0o755)
     except Exception:
         pass  # Windows
+    return hook_path
+
+
+@main.command("install-hooks")
+@click.option("--root", type=click.Path(file_okay=False, path_type=Path), default=None)
+@click.option("--force", is_flag=True, default=False)
+def install_hooks(root: Path | None, force: bool) -> None:
+    """Install a post-commit hook that runs `claude-repo-mem index --no-embed`."""
+    repo_root = root or Path.cwd()
+    hook_path = _write_post_commit_hook(repo_root, force)
     click.echo(f"installed: {hook_path}")
 
 
