@@ -42,3 +42,16 @@ def test_init_conflict_requires_force(tmp_path: Path):
     res = runner.invoke(main, ["init", "--root", str(tmp_path)])
     assert res.exit_code != 0
     assert "force" in res.output.lower()
+
+
+def test_init_target_desktop(tmp_path, monkeypatch):
+    from claude_repo_mem import mcp_config
+    cfg = tmp_path / "desktop" / "claude_desktop_config.json"
+    monkeypatch.setattr(mcp_config, "desktop_config_path", lambda: cfg)
+    repo = tmp_path / "proj"
+    repo.mkdir()
+    runner = CliRunner()
+    res = runner.invoke(main, ["init", "--root", str(repo), "--target", "desktop"])
+    assert res.exit_code == 0, res.output
+    data = json.loads(cfg.read_text(encoding="utf-8"))
+    assert "claude-repo-mem-proj" in data["mcpServers"]

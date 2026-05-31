@@ -64,6 +64,32 @@ claude-repo-mem init --index --hooks --force  # full setup, overwrite any existi
 **`--index` and `--hooks` are off by default** — they are opt-in so `init` stays
 fast and non-destructive on repos that already have a partial setup.
 
+### Writing to Claude Desktop (`--target desktop`)
+
+Pass `--target desktop` to merge the entry into Claude Desktop's global config
+instead of the project `.mcp.json`:
+
+```bash
+claude-repo-mem init --target desktop
+claude-repo-mem init --target desktop --root ~/projects/myrepo --force
+```
+
+The target file is the Claude Desktop config for the current OS:
+
+| Platform | Path |
+|----------|------|
+| Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
+| macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Linux | `~/.config/Claude/claude_desktop_config.json` |
+
+The server is keyed by folder name (e.g. `claude-repo-mem-myrepo`) so multiple
+repos coexist in a single config without colliding. The absolute path to the
+`claude-repo-mem` executable is resolved at init time and baked into the entry, so
+Desktop always finds the right binary.
+
+After writing, **restart Claude Desktop** to load the new server — Desktop reads
+its config only at startup.
+
 ### Multi-project usage
 
 Run `init` once per repo. Each repo gets:
@@ -203,7 +229,7 @@ Snapshots are markdown under `.claude-repo-mem/handoffs/` and are git-trackable.
 ## CLI summary
 
 ```text
-claude-repo-mem init  [--root PATH] [--embedder NAME] [--no-watch] [--index] [--hooks] [--force]
+claude-repo-mem init  [--root PATH] [--embedder NAME] [--no-watch] [--index] [--hooks] [--force] [--target claude-code|desktop]
 claude-repo-mem index [--embedder NAME] [--no-embed] [--reset] [--root DIR]
 claude-repo-mem serve [--watch | --no-watch] [--root DIR]
 claude-repo-mem doctor [--root DIR]                  # layer counts, T2 coverage, counters

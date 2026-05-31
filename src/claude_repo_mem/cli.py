@@ -231,21 +231,29 @@ def serve(root: Path | None, watch: bool) -> None:
               help="Install the post-commit reindex git hook")
 @click.option("--force", is_flag=True, default=False,
               help="Overwrite an existing claude-repo-mem .mcp.json entry / git hook")
+@click.option("--target", type=click.Choice(["claude-code", "desktop"]), default="claude-code",
+              help="Where to write MCP config: project .mcp.json (claude-code) or Claude Desktop's global config")
 def init(root: Path | None, embedder: str | None, no_watch: bool,
-         do_index: bool, hooks: bool, force: bool) -> None:
+         do_index: bool, hooks: bool, force: bool, target: str) -> None:
     """Initialize a repo: scaffold .claude-repo-mem/ and wire up .mcp.json."""
-    from .mcp_config import merge_mcp_config, McpConfigError
+    from .mcp_config import merge_mcp_config, merge_desktop_config, McpConfigError
 
     repo_root = (root or Path.cwd()).resolve()
     settings = Settings.for_repo(repo_root)  # creates .claude-repo-mem/
 
     try:
-        action = merge_mcp_config(
-            repo_root, embedder=embedder, watch=not no_watch, force=force
-        )
+        if target == "desktop":
+            action, cfg_path = merge_desktop_config(
+                repo_root, embedder=embedder, watch=not no_watch, force=force
+            )
+            click.echo(f"{cfg_path}: {action}")
+        else:
+            action = merge_mcp_config(
+                repo_root, embedder=embedder, watch=not no_watch, force=force
+            )
+            click.echo(f".mcp.json: {action}")
     except McpConfigError as e:
         raise click.ClickException(str(e))
-    click.echo(f".mcp.json: {action}")
 
     if hooks:
         hook_path = _write_post_commit_hook(repo_root, force)
