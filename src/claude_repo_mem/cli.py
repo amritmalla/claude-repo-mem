@@ -218,5 +218,53 @@ def serve(root: Path | None, watch: bool) -> None:
             watcher.stop()
 
 
+@main.command()
+@click.option("--root", type=click.Path(file_okay=False, path_type=Path),
+              default=None, help="Repo root (defaults to cwd)")
+@click.option("--embedder", type=str, default=None,
+              help="Embedder baked into .mcp.json (bge-small|openai|voyage)")
+@click.option("--no-watch", is_flag=True, default=False,
+              help="Bake --no-watch into .mcp.json (default: watch on)")
+@click.option("--index", "do_index", is_flag=True, default=False,
+              help="Run the first index now (downloads bge-small on first run)")
+@click.option("--hooks", is_flag=True, default=False,
+              help="Install the post-commit reindex git hook")
+@click.option("--force", is_flag=True, default=False,
+              help="Overwrite an existing claude-repo-mem .mcp.json entry / git hook")
+def init(root: Path | None, embedder: str | None, no_watch: bool,
+         do_index: bool, hooks: bool, force: bool) -> None:
+    """Initialize a repo: scaffold .claude-repo-mem/ and wire up .mcp.json."""
+    from .mcp_config import merge_mcp_config, McpConfigError
+
+    repo_root = (root or Path.cwd()).resolve()
+    settings = Settings.for_repo(repo_root)  # creates .claude-repo-mem/
+
+    try:
+        action = merge_mcp_config(
+            repo_root, embedder=embedder, watch=not no_watch, force=force
+        )
+    except McpConfigError as e:
+        raise click.ClickException(str(e))
+    click.echo(f".mcp.json: {action}")
+
+    if hooks:
+        hook_path = _write_post_commit_hook(repo_root, force)
+        click.echo(f"hook: {hook_path}")
+
+    indexed = False
+    if do_index:
+        from .embeddings.factory import make_embedder
+        emb = make_embedder(embedder)
+        init_db(settings.db_path, dim=emb.dim)
+        stats = full_reindex(settings, embedder=emb)
+        click.echo(f"indexed: units_written={stats['units_written']}")
+        indexed = True
+
+    click.echo("\nNext steps:")
+    if not indexed:
+        click.echo("  - run `claude-repo-mem index` to build the index")
+    click.echo("  - restart Claude Code (or reload the workspace) to load the MCP server")
+
+
 if __name__ == "__main__":
     main()
