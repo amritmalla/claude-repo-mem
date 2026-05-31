@@ -39,16 +39,84 @@ and tool-call counters.
 | `--embedder NAME` | Pick the embedding backend for this run. |
 | `--root DIR` | Index a repo other than the current directory. |
 
+## `init` — one-step setup
+
+`claude-repo-mem init` is the recommended way to get started. It does two things in
+a single command:
+
+1. **Scaffolds the state directory.** Creates `.claude-repo-mem/` in the repo root
+   (or the path given by `--root`).
+2. **Writes or merges `.mcp.json`.** Adds a `claude-repo-mem` entry with the correct
+   `--root` baked in. If an `.mcp.json` already exists, the merge preserves every
+   other `mcpServers` entry; it refuses to overwrite a `claude-repo-mem` entry that
+   already exists and differs, unless you pass `--force`.
+
+```bash
+cd your-repo
+claude-repo-mem init                # scaffold + write/merge .mcp.json
+claude-repo-mem init --no-watch     # same, but serve args omit --watch
+claude-repo-mem init --embedder openai  # bake a non-default embedder into the serve args
+claude-repo-mem init --index        # also run the first index immediately
+claude-repo-mem init --hooks        # also install the post-commit git hook
+claude-repo-mem init --index --hooks --force  # full setup, overwrite any existing entry
+```
+
+**`--index` and `--hooks` are off by default** — they are opt-in so `init` stays
+fast and non-destructive on repos that already have a partial setup.
+
+### Writing to Claude Desktop (`--target desktop`)
+
+Pass `--target desktop` to merge the entry into Claude Desktop's global config
+instead of the project `.mcp.json`:
+
+```bash
+claude-repo-mem init --target desktop
+claude-repo-mem init --target desktop --root ~/projects/myrepo --force
+```
+
+The target file is the Claude Desktop config for the current OS:
+
+| Platform | Path |
+|----------|------|
+| Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
+| macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Linux | `~/.config/Claude/claude_desktop_config.json` |
+
+The server is keyed by folder name (e.g. `claude-repo-mem-myrepo`) so multiple
+repos coexist in a single config without colliding. The absolute path to the
+`claude-repo-mem` executable is resolved at init time and baked into the entry, so
+Desktop always finds the right binary.
+
+After writing, **restart Claude Desktop** to load the new server — Desktop reads
+its config only at startup.
+
+### Multi-project usage
+
+Run `init` once per repo. Each repo gets:
+
+- Its own absolute `--root` baked into its own `.mcp.json`, so Claude Code launches a
+  separate server instance per project.
+- An isolated SQLite database under its own `.claude-repo-mem/`, so indexes never
+  collide regardless of how many projects you have open simultaneously.
+
+```bash
+cd ~/projects/api      && claude-repo-mem init --index
+cd ~/projects/frontend && claude-repo-mem init --index
+```
+
+Each project's `.mcp.json` carries a distinct `--root`, and the two servers run
+independently.
+
 ## Wire into Claude Code
 
-Drop a `.mcp.json` in your repo root:
+Drop a `.mcp.json` in your repo root and pin the repo with `--root`:
 
 ```json
 {
   "mcpServers": {
     "claude-repo-mem": {
       "command": "claude-repo-mem",
-      "args": ["serve", "--watch"]
+      "args": ["serve", "--watch", "--root", "/absolute/path/to/your-repo"]
     }
   }
 }
@@ -57,33 +125,29 @@ Drop a `.mcp.json` in your repo root:
 Claude Code auto-launches the server on workspace load. After editing `.mcp.json`,
 reconnect the server (restart Claude Code, or use `/mcp` → reconnect).
 
-No path is required: Claude Code injects `CLAUDE_PROJECT_DIR` (the repo it was
-opened in) into the spawned server's environment, and the server uses it to locate
-`.claude-repo-mem/` even though the host launches MCP servers from a system working
-directory (e.g. `C:\Windows\System32` on Windows) rather than your repo.
+> **Why an explicit root is required.** Claude Code launches MCP servers from a
+> system working directory (e.g. `C:\Windows\System32` on Windows), *not* your repo,
+> so cwd-based discovery can't find `.claude-repo-mem/`. Current Claude Code builds
+> do **not** inject `CLAUDE_PROJECT_DIR` into the spawned server's environment, nor
+> advertise the MCP `roots` capability — so the server has no way to learn the repo
+> on its own. Pin it explicitly.
 
-### Pinning the root explicitly
+### Root resolution order
 
-Root resolution tries, in order:
+The server resolves the repo root in this order:
 
-1. **`CLAUDE_REPO_MEM_ROOT`** — an explicit override (env var or `.mcp.json` `env`).
-2. **Walk up from the working directory** looking for `.claude-repo-mem/`.
-3. **`CLAUDE_PROJECT_DIR`** — the project root Claude Code injects.
+1. **`--root` flag** (passed in `args`) — when present, used directly.
+2. **`CLAUDE_REPO_MEM_ROOT`** — explicit override (env var or `.mcp.json` `env`).
+3. **Walk up from the working directory** looking for `.claude-repo-mem/`.
+4. **`CLAUDE_PROJECT_DIR`** — used if the host injects it (future Claude Code builds
+   or other MCP hosts may; current builds do not).
 
-The `CLAUDE_PROJECT_DIR` fallback covers Claude Code automatically. Pin the root
-explicitly when running under a different MCP host (Cursor, etc.) that does not set
-`CLAUDE_PROJECT_DIR`, or to point at a repo other than the one you opened — either
-with the `--root` flag:
-
-```json
-"args": ["serve", "--watch", "--root", "/absolute/path/to/your-repo"]
-```
-
-or with the `CLAUDE_REPO_MEM_ROOT` environment variable (which also accepts
-`.mcp.json` variable expansion):
+Equivalent to `--root`, you can use the `CLAUDE_REPO_MEM_ROOT` environment variable
+(handy under hosts that only expose `env`, and it accepts `.mcp.json` variable
+expansion):
 
 ```json
-"env": { "CLAUDE_REPO_MEM_ROOT": "${CLAUDE_PROJECT_DIR:-.}" }
+"env": { "CLAUDE_REPO_MEM_ROOT": "/absolute/path/to/your-repo" }
 ```
 
 The `--watch` flag runs an incremental file watcher (debounced 750ms) so the index
@@ -161,10 +225,13 @@ Snapshots are markdown under `.claude-repo-mem/handoffs/` and are git-trackable.
 | Long pause on first `index` | One-time `bge-small` model download (~90MB) | Wait for the first run; subsequent runs are fast. |
 | `doctor` shows low `t2_coverage` right after indexing | Summaries backfill asynchronously and need an LLM backend | Let summarization catch up; ensure an LLM backend is configured. |
 | `OPENAI_API_KEY not set` / `VOYAGE_API_KEY not set` | Selected a remote embedder without its key | Set the key, or switch back to `bge-small`. |
+| Claude Desktop shows the server as failed / "disconnected" | A bare `claude-repo-mem` command isn't on Desktop's `PATH` | Use `claude-repo-mem init --target desktop`, which resolves and bakes in the absolute executable path; then fully restart Desktop. |
+| `init` errors with `... already has a 'claude-repo-mem' entry that differs` | An existing config entry doesn't match what `init` would write | Re-run with `--force` to overwrite it, or edit the entry by hand. |
 
 ## CLI summary
 
 ```text
+claude-repo-mem init  [--root PATH] [--embedder NAME] [--no-watch] [--index] [--hooks] [--force] [--target claude-code|desktop]
 claude-repo-mem index [--embedder NAME] [--no-embed] [--reset] [--root DIR]
 claude-repo-mem serve [--watch | --no-watch] [--root DIR]
 claude-repo-mem doctor [--root DIR]                  # layer counts, T2 coverage, counters

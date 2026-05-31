@@ -31,28 +31,39 @@ Requires Python 3.11+.
 
 ## Quick start
 
+The fastest path is `init` — it creates `.claude-repo-mem/` **and** writes (or merges) `.mcp.json` for you in one step:
+
 ```bash
 cd your-repo
+claude-repo-mem init                # scaffold state dir + write .mcp.json
 claude-repo-mem index               # build the index (downloads bge-small on first run, ~90MB)
 claude-repo-mem doctor              # verify: units, by_layer, T2 coverage, counters
 ```
 
-To expose it to Claude Code, drop a `.mcp.json` in your repo root:
+Then open Claude Code in the repo — it auto-launches the server on workspace load.
+
+Want to index immediately and install the post-commit hook at the same time?
+
+```bash
+claude-repo-mem init --index --hooks
+```
+
+> Pin the repo with `--root` (or the `CLAUDE_REPO_MEM_ROOT` env var). Claude Code launches MCP servers from a system working directory (not your repo) and does not inject `CLAUDE_PROJECT_DIR` into the server's environment, so without an explicit root the server can't find the index and recall comes back empty. See [docs/usage.md](docs/usage.md#wire-into-claude-code).
+
+**Manual alternative.** If you prefer to hand-edit `.mcp.json`, skip `init` and drop the file yourself:
 
 ```json
 {
   "mcpServers": {
     "claude-repo-mem": {
       "command": "claude-repo-mem",
-      "args": ["serve", "--watch"]
+      "args": ["serve", "--watch", "--root", "/absolute/path/to/your-repo"]
     }
   }
 }
 ```
 
 Claude Code will auto-launch the server on workspace load. The `--watch` flag runs an incremental file watcher (debounced 750ms) so the index stays current as you edit.
-
-> No path needed under Claude Code: it injects `CLAUDE_PROJECT_DIR` into the server's environment, which the server uses to locate the index even though MCP servers are launched from a system working directory rather than your repo. Under a different MCP host that doesn't set `CLAUDE_PROJECT_DIR`, pin the repo with `"--root", "/abs/path"` or the `CLAUDE_REPO_MEM_ROOT` env var. See [docs/usage.md](docs/usage.md#wire-into-claude-code).
 
 Prefer not to run the watcher? Install a git hook instead:
 
@@ -65,6 +76,7 @@ claude-repo-mem install-hooks       # writes .git/hooks/post-commit
 ## CLI
 
 ```text
+claude-repo-mem init  [--root PATH] [--embedder NAME] [--no-watch] [--index] [--hooks] [--force]
 claude-repo-mem index [--embedder NAME] [--no-embed] [--reset]
 claude-repo-mem serve [--watch | --no-watch]
 claude-repo-mem doctor                              # layer counts, T2 coverage, counters

@@ -105,12 +105,12 @@ def bench(root: Path | None, fixture: Path, k: int, no_embed: bool) -> None:
         click.echo(f"p95_latency_ms: {result.p95_latency_ms:.1f}")
 
 
-@main.command("install-hooks")
-@click.option("--root", type=click.Path(file_okay=False, path_type=Path), default=None)
-@click.option("--force", is_flag=True, default=False)
-def install_hooks(root: Path | None, force: bool) -> None:
-    """Install a post-commit hook that runs `claude-repo-mem index --no-embed`."""
-    repo_root = root or Path.cwd()
+def _write_post_commit_hook(repo_root: Path, force: bool) -> Path:
+    """Write a post-commit hook that reindexes. Returns the hook path.
+
+    Raises click.ClickException if not a git repo or the hook exists
+    without --force.
+    """
     git_dir = repo_root / ".git"
     if not git_dir.is_dir():
         raise click.ClickException(f"not a git repo: {repo_root}")
@@ -131,6 +131,16 @@ def install_hooks(root: Path | None, force: bool) -> None:
         hook_path.chmod(0o755)
     except Exception:
         pass  # Windows
+    return hook_path
+
+
+@main.command("install-hooks")
+@click.option("--root", type=click.Path(file_okay=False, path_type=Path), default=None)
+@click.option("--force", is_flag=True, default=False)
+def install_hooks(root: Path | None, force: bool) -> None:
+    """Install a post-commit hook that runs `claude-repo-mem index --no-embed`."""
+    repo_root = root or Path.cwd()
+    hook_path = _write_post_commit_hook(repo_root, force)
     click.echo(f"installed: {hook_path}")
 
 
@@ -206,6 +216,62 @@ def serve(root: Path | None, watch: bool) -> None:
     finally:
         if watcher is not None:
             watcher.stop()
+
+
+@main.command()
+@click.option("--root", type=click.Path(file_okay=False, path_type=Path),
+              default=None, help="Repo root (defaults to cwd)")
+@click.option("--embedder", type=str, default=None,
+              help="Embedder baked into .mcp.json (bge-small|openai|voyage)")
+@click.option("--no-watch", is_flag=True, default=False,
+              help="Bake --no-watch into .mcp.json (default: watch on)")
+@click.option("--index", "do_index", is_flag=True, default=False,
+              help="Run the first index now (downloads bge-small on first run)")
+@click.option("--hooks", is_flag=True, default=False,
+              help="Install the post-commit reindex git hook")
+@click.option("--force", is_flag=True, default=False,
+              help="Overwrite an existing claude-repo-mem .mcp.json entry / git hook")
+@click.option("--target", type=click.Choice(["claude-code", "desktop"]), default="claude-code",
+              help="Where to write MCP config: project .mcp.json (claude-code) or Claude Desktop's global config")
+def init(root: Path | None, embedder: str | None, no_watch: bool,
+         do_index: bool, hooks: bool, force: bool, target: str) -> None:
+    """Initialize a repo: scaffold .claude-repo-mem/ and wire up .mcp.json."""
+    from .mcp_config import merge_mcp_config, merge_desktop_config, McpConfigError
+
+    repo_root = (root or Path.cwd()).resolve()
+    settings = Settings.for_repo(repo_root)  # creates .claude-repo-mem/
+
+    try:
+        if target == "desktop":
+            action, cfg_path = merge_desktop_config(
+                repo_root, embedder=embedder, watch=not no_watch, force=force
+            )
+            click.echo(f"{cfg_path}: {action}")
+        else:
+            action = merge_mcp_config(
+                repo_root, embedder=embedder, watch=not no_watch, force=force
+            )
+            click.echo(f".mcp.json: {action}")
+    except McpConfigError as e:
+        raise click.ClickException(str(e))
+
+    if hooks:
+        hook_path = _write_post_commit_hook(repo_root, force)
+        click.echo(f"hook: {hook_path}")
+
+    indexed = False
+    if do_index:
+        from .embeddings.factory import make_embedder
+        emb = make_embedder(embedder)
+        init_db(settings.db_path, dim=emb.dim)
+        stats = full_reindex(settings, embedder=emb)
+        click.echo(f"indexed: units_written={stats['units_written']}")
+        indexed = True
+
+    click.echo("\nNext steps:")
+    if not indexed:
+        click.echo("  - run `claude-repo-mem index` to build the index")
+    click.echo("  - restart Claude Code (or reload the workspace) to load the MCP server")
 
 
 if __name__ == "__main__":
