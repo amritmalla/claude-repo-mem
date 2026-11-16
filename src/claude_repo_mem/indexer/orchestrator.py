@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from contextlib import closing
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Optional
 
 import numpy as np
 
@@ -9,8 +10,10 @@ from ..config import Settings
 from ..db.connection import connect
 from ..db.repository import Repository
 from ..embeddings.base import Embedder
+from ..embeddings.validation import validate_embedder
+from ..memory.lifecycle import index_memory_unit, restore_supersession
 from ..units.model import Unit, Relation
-from .parsers.base import Parser, ParseResult
+from .parsers.base import Parser
 from .parsers.code_jsts import JsTsParser
 from .parsers.code_python import PythonParser
 from .parsers.code_java import JavaParser
@@ -23,7 +26,7 @@ from .synthesizers.django_urls import DjangoUrlsSynthesizer
 from .synthesizers.express_routes import ExpressRoutesSynthesizer
 from .synthesizers.react_hooks import ReactHooksSynthesizer
 from .synthesizers.imports import ImportsSynthesizer
-from .walker import walk_repo, hash_file
+from .walker import walk_repo
 
 
 PARSERS: list[Parser] = [
@@ -35,28 +38,26 @@ PARSERS: list[Parser] = [
 
 
 def full_reindex(settings: Settings, embedder: Optional[Embedder] = None) -> dict:
+    with closing(connect(settings.db_path)) as conn:
+        return _full_reindex(settings, Repository(conn), embedder)
+
+
+def _full_reindex(settings: Settings, repository: Repository, embedder: Optional[Embedder]) -> dict:
     repo_root = settings.repo_root
-    conn = connect(settings.db_path)
-    repository = Repository(conn)
+    conn = repository.conn
 
     if embedder is not None:
-        row = conn.execute("SELECT name, dim FROM embedder_meta LIMIT 1").fetchone()
-        emb_name = getattr(embedder, "name", "unknown")
-        if row and (row["name"] != emb_name or row["dim"] != embedder.dim):
-            raise ValueError(
-                f"embedder mismatch: db has {row['name']}/{row['dim']}, "
-                f"got {emb_name}/{embedder.dim}. Run `claude-repo-mem index --reset`."
-            )
+        validate_embedder(conn, embedder)
 
     all_units: list[Unit] = []
     all_relations: list[Relation] = []
     sources: dict[Path, str] = {}
 
-    for path in walk_repo(repo_root):
+    for path in walk_repo(repo_root, strict=True):
         try:
             text = path.read_text(encoding="utf-8")
-        except (UnicodeDecodeError, OSError):
-            continue
+        except (UnicodeDecodeError, OSError) as exc:
+            raise ValueError(f"Cannot read {path}; full reindex aborted") from exc
         parser = _pick_parser(path)
         if not parser:
             continue
@@ -65,19 +66,9 @@ def full_reindex(settings: Settings, embedder: Optional[Embedder] = None) -> dic
         all_relations.extend(result.relations)
         sources[path] = text
 
-    # Synthesizers run on the full snapshot.
-    for route_synth in (
-        FlaskRoutesSynthesizer(),
-        DjangoUrlsSynthesizer(),
-        ExpressRoutesSynthesizer(),
-    ):
-        extra_units, route_rels = route_synth.synthesize_with_units(
-            all_units, sources, repo_root
-        )
-        all_units.extend(extra_units)
-        all_relations.extend(route_rels)
-    all_relations.extend(ImportsSynthesizer().synthesize(all_units, sources, repo_root))
-    all_relations.extend(ReactHooksSynthesizer().synthesize(all_units, sources, repo_root))
+    extra_units, synthesized_relations = _synthesize_graph(all_units, sources, repo_root)
+    all_units.extend(extra_units)
+    all_relations.extend(synthesized_relations)
 
     all_units = [_relativize_scope(u, repo_root) for u in all_units]
 
@@ -88,27 +79,49 @@ def full_reindex(settings: Settings, embedder: Optional[Embedder] = None) -> dic
         vecs = embedder.embed(texts)
         embeddings = {u.id: v for u, v in zip(all_units, vecs)}
 
-    for u in all_units:
-        repository.upsert_unit(u, embedding=embeddings.get(u.id))
-    for r in all_relations:
-        repository.add_relation(r)
+    # Publish the complete snapshot together; a failed write restores the old one.
+    with repository.transaction():
+        units_deleted = repository.prune_indexed_units(u.id for u in all_units)
+        for u in all_units:
+            if u.layer == "memory":
+                index_memory_unit(repository, u, embedding=embeddings.get(u.id))
+            else:
+                repository.upsert_unit(u, embedding=embeddings.get(u.id))
+        restore_supersession(repository, all_units)
+        for r in all_relations:
+            repository.add_relation(r)
 
-    if embedder is not None:
-        import time
-        emb_name = getattr(embedder, "name", "unknown")
-        conn.execute(
-            "INSERT OR IGNORE INTO embedder_meta(name, dim, created_at) VALUES(?, ?, ?)",
-            (emb_name, embedder.dim, int(time.time())),
-        )
-        conn.commit()
-
-    conn.close()
+        if embedder is not None:
+            import time
+            emb_name = getattr(embedder, "name", "unknown")
+            conn.execute(
+                "INSERT OR IGNORE INTO embedder_meta(name, dim, created_at) VALUES(?, ?, ?)",
+                (emb_name, embedder.dim, int(time.time())),
+            )
 
     return {
         "units_written": len(all_units),
         "relations_written": len(all_relations),
         "files_seen": len(sources),
+        "units_deleted": units_deleted,
     }
+
+
+def _synthesize_graph(
+    units: list[Unit], sources: dict[Path, str], repo_root: Path,
+) -> tuple[list[Unit], list[Relation]]:
+    """Use the same graph builders for full and incremental snapshots."""
+    all_units = list(units)
+    generated: list[Unit] = []
+    relations: list[Relation] = []
+    for synth in (FlaskRoutesSynthesizer(), DjangoUrlsSynthesizer(), ExpressRoutesSynthesizer()):
+        extra, edges = synth.synthesize_with_units(all_units, sources, repo_root)
+        generated.extend(extra)
+        all_units.extend(extra)
+        relations.extend(edges)
+    relations.extend(ImportsSynthesizer().synthesize(all_units, sources, repo_root))
+    relations.extend(ReactHooksSynthesizer().synthesize(all_units, sources, repo_root))
+    return generated, relations
 
 
 def _relativize_scope(u: Unit, repo_root: Path) -> Unit:

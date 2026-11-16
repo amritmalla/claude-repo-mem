@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
+from mcp.types import CreateMessageResult, SamplingMessage, TextContent
 from claude_repo_mem.llm.mcp_sampling import McpSamplingClient
 from claude_repo_mem.llm.base import LLMError
 
@@ -44,3 +45,18 @@ async def test_complete_handles_no_text_content():
     ctx.session.create_message = AsyncMock(return_value=MagicMock(content=[]))
     out = await McpSamplingClient(ctx).complete("s", "u")
     assert out == ""
+
+
+@pytest.mark.asyncio
+async def test_complete_accepts_sdk_single_content_response():
+    ctx = MagicMock()
+    ctx.session.create_message = AsyncMock(return_value=CreateMessageResult(
+        model="host", role="assistant", content=TextContent(type="text", text="Host reply"),
+    ))
+
+    result = await McpSamplingClient(ctx).complete("system", "user")
+
+    assert result == "Host reply"
+    [message] = ctx.session.create_message.call_args.kwargs["messages"]
+    assert isinstance(message, SamplingMessage)
+    assert message.content == TextContent(type="text", text="user")

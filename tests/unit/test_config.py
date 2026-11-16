@@ -90,5 +90,12 @@ def test_embedder_env_override(tmp_repo: Path, monkeypatch):
 def test_embedder_default(tmp_repo: Path, monkeypatch):
     monkeypatch.chdir(tmp_repo)
     monkeypatch.delenv("CLAUDE_REPO_MEM_EMBED", raising=False)
+    monkeypatch.delenv("CLAUDE_REPO_MEM_EMBEDDER", raising=False)
     s = Settings.discover()
     assert s.embedder == "bge-small"
+
+
+def test_canonical_embedder_env_takes_precedence(tmp_repo: Path, monkeypatch):
+    monkeypatch.setenv("CLAUDE_REPO_MEM_EMBED", "bge-small")
+    monkeypatch.setenv("CLAUDE_REPO_MEM_EMBEDDER", "voyage")
+    assert Settings.for_repo(tmp_repo).embedder == "voyage"

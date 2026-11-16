@@ -35,10 +35,11 @@ class PythonParser:
         return path.suffix == ".py"
 
     def parse(self, path: Path, text: str) -> ParseResult:
-        tree = _parser().parse(text.encode("utf-8"))
+        source = text.encode("utf-8")
+        tree = _parser().parse(source)
         scope = _scope_from_path(path)
         units: List[Unit] = []
-        _walk(tree.root_node, text, path, scope, units, parent_id=None, class_name=None)
+        _walk(tree.root_node, source, path, scope, units, parent_id=None, class_name=None)
         return ParseResult(units=units)
 
 
@@ -53,15 +54,15 @@ def _scope_from_path(path: Path) -> str:
     return "/".join(parts) if parts else "root"
 
 
-def _text_of(node, source: str) -> str:
-    return source[node.start_byte : node.end_byte]
+def _text_of(node, source: bytes) -> str:
+    return source[node.start_byte : node.end_byte].decode("utf-8")
 
 
 def _line_range(node) -> tuple[int, int]:
     return (node.start_point[0] + 1, node.end_point[0] + 1)
 
 
-def _signature(node, source: str) -> str:
+def _signature(node, source: bytes) -> str:
     """Extract `(params) -> return` from a function_definition node."""
     params_node = node.child_by_field_name("parameters")
     return_node = node.child_by_field_name("return_type")
@@ -71,7 +72,7 @@ def _signature(node, source: str) -> str:
     return params
 
 
-def _docstring_first_line(node, source: str) -> Optional[str]:
+def _docstring_first_line(node, source: bytes) -> Optional[str]:
     body = node.child_by_field_name("body")
     if not body or body.child_count == 0:
         return None
@@ -91,7 +92,7 @@ def _docstring_first_line(node, source: str) -> Optional[str]:
     return None
 
 
-def _walk(node, source: str, path: Path, scope: str,
+def _walk(node, source: bytes, path: Path, scope: str,
           units: List[Unit], parent_id: Optional[str], class_name: Optional[str]) -> None:
     for child in node.children:
         if child.type == "function_definition":

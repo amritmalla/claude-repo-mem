@@ -1,4 +1,5 @@
 import time
+from dataclasses import replace
 import numpy as np
 import pytest
 from pathlib import Path
@@ -52,6 +53,63 @@ def test_upsert_with_embedding_writes_vec(repo: Repository):
     hits = repo.vec_search(vec, limit=5)
     assert len(hits) == 1
     assert hits[0].id == "code://function/a"
+
+
+@pytest.mark.parametrize("changes", [
+    {"t2_summary": "Generated summary"},
+    {"scope": "backend/auth"},
+    {"last_seen_at": 123},
+    {"metadata": "Updated metadata"},
+])
+def test_metadata_update_preserves_embedding(repo: Repository, changes):
+    unit = _u()
+    vector = np.array([1.0] + [0.0] * 383, dtype="float32")
+    repo.upsert_unit(unit, embedding=vector)
+
+    repo.upsert_unit(replace(unit, **changes))
+
+    hits = repo.vec_search(vector, limit=5)
+    assert len(hits) == 1
+    assert hits[0].id == unit.id
+    assert hits[0].score == 0
+    assert repo.get_unit(unit.id) == replace(unit, **changes)
+
+
+def test_upsert_replaces_existing_embedding(repo: Repository):
+    unit = _u()
+    old = np.array([1.0] + [0.0] * 383, dtype="float32")
+    current = np.array([0.0, 1.0] + [0.0] * 382, dtype="float32")
+    repo.upsert_unit(unit, embedding=old)
+
+    repo.upsert_unit(unit, embedding=current)
+
+    assert repo.vec_search(current, limit=5)[0].score == 0
+    assert repo.vec_search(old, limit=5)[0].score < 0
+    assert repo.conn.execute("SELECT COUNT(*) FROM unit_vec").fetchone()[0] == 1
+
+
+@pytest.mark.parametrize("changes", [{"content_hash": "changed"}, {"t1_header": "changed header"}])
+def test_upsert_invalidates_embedding_for_changed_content(repo: Repository, changes):
+    unit = _u()
+    vector = np.ones(384, dtype="float32")
+    repo.upsert_unit(unit, embedding=vector)
+
+    repo.upsert_unit(replace(unit, **changes))
+
+    assert repo.vec_search(vector, limit=5) == []
+    assert repo.get_unit(unit.id) == replace(unit, **changes)
+
+
+def test_invalid_replacement_embedding_keeps_previous_unit_and_vector(repo: Repository):
+    unit = _u()
+    vector = np.ones(384, dtype="float32")
+    repo.upsert_unit(unit, embedding=vector)
+
+    with pytest.raises(ValueError, match="1-D"):
+        repo.upsert_unit(replace(unit, t1_header="changed"), embedding=np.zeros((2, 384)))
+
+    assert repo.get_unit(unit.id) == unit
+    assert repo.vec_search(vector, limit=5)[0].score == 0
 
 
 def test_vec_search_ranks_by_distance(repo: Repository):

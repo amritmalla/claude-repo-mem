@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 import sys
 from pathlib import Path
 
@@ -8,7 +9,6 @@ import click
 
 from .config import Settings
 from .db.connection import connect, init_db
-from .db.repository import Repository
 from .indexer.orchestrator import full_reindex
 
 
@@ -21,7 +21,7 @@ def main() -> None:
 @click.option("--root", type=click.Path(file_okay=False, path_type=Path),
               default=None, help="Repo root (defaults to cwd)")
 @click.option("--no-embed", is_flag=True, default=False,
-              help="Skip embedding generation (faster, FTS-only retrieval)")
+              help="Skip generating embeddings; retain vectors for unchanged content")
 @click.option("--embedder", type=str, default=None,
               help="Embedder name (bge-small|openai|voyage); env CLAUDE_REPO_MEM_EMBEDDER")
 @click.option("--reset", is_flag=True, default=False,
@@ -36,8 +36,8 @@ def index(root: Path | None, no_embed: bool, embedder: str | None, reset: bool) 
     emb = None
     if not no_embed:
         from .embeddings.factory import make_embedder
-        emb = make_embedder(embedder)
-    init_db(settings.db_path, dim=emb.dim if emb else 384)
+        emb = make_embedder(embedder or settings.embedder)
+    init_db(settings.db_path, dim=emb.dim if emb else None)
 
     stats = full_reindex(settings, embedder=emb)
     click.echo(f"units_written={stats['units_written']} "
@@ -95,7 +95,7 @@ def bench(root: Path | None, fixture: Path, k: int, no_embed: bool) -> None:
     emb = None
     if not no_embed:
         from .embeddings.factory import make_embedder
-        emb = make_embedder()
+        emb = make_embedder(settings.embedder)
     result = run_benchmark(settings, fixture, embedder=emb, k=k)
     click.echo(f"fixture: {fixture}")
     click.echo(f"queries: {result.total}")
@@ -191,7 +191,9 @@ def _make_cli_llm():
               default=None, help="Repo root (defaults to cwd)")
 @click.option("--watch/--no-watch", default=True,
               help="Run a file watcher in the background (default on)")
-def serve(root: Path | None, watch: bool) -> None:
+@click.option("--embedder", type=str, default=None,
+              help="Embedding backend (bge-small|openai|voyage); overrides the environment")
+def serve(root: Path | None, watch: bool, embedder: str | None) -> None:
     """Run the MCP server on stdio."""
     if root is not None:
         settings = Settings.for_repo(root)
@@ -202,7 +204,18 @@ def serve(root: Path | None, watch: bool) -> None:
             raise click.ClickException(
                 str(e) + "\nTip: pass --root <repo-path> or run `claude-repo-mem init` first."
             )
-    init_db(settings.db_path)
+    if embedder is not None:
+        settings = replace(settings, embedder=embedder)
+    from .embeddings.factory import make_embedder
+    from .embeddings.validation import validate_embedder
+    try:
+        emb = make_embedder(settings.embedder)
+        init_db(settings.db_path, dim=emb.dim)
+        from contextlib import closing
+        with closing(connect(settings.db_path)) as conn:
+            validate_embedder(conn, emb)
+    except (ValueError, ImportError) as exc:
+        raise click.ClickException(str(exc)) from exc
 
     watcher = None
     if watch:
@@ -212,7 +225,7 @@ def serve(root: Path | None, watch: bool) -> None:
 
     try:
         from .server import serve_stdio
-        asyncio.run(serve_stdio())
+        asyncio.run(serve_stdio(settings=settings, embedder=emb))
     finally:
         if watcher is not None:
             watcher.stop()
@@ -240,16 +253,17 @@ def init(root: Path | None, embedder: str | None, no_watch: bool,
 
     repo_root = (root or Path.cwd()).resolve()
     settings = Settings.for_repo(repo_root)  # creates .claude-repo-mem/
+    selected_embedder = embedder or settings.embedder
 
     try:
         if target == "desktop":
             action, cfg_path = merge_desktop_config(
-                repo_root, embedder=embedder, watch=not no_watch, force=force
+                repo_root, embedder=selected_embedder, watch=not no_watch, force=force
             )
             click.echo(f"{cfg_path}: {action}")
         else:
             action = merge_mcp_config(
-                repo_root, embedder=embedder, watch=not no_watch, force=force
+                repo_root, embedder=selected_embedder, watch=not no_watch, force=force
             )
             click.echo(f".mcp.json: {action}")
     except McpConfigError as e:
@@ -262,7 +276,7 @@ def init(root: Path | None, embedder: str | None, no_watch: bool,
     indexed = False
     if do_index:
         from .embeddings.factory import make_embedder
-        emb = make_embedder(embedder)
+        emb = make_embedder(selected_embedder)
         init_db(settings.db_path, dim=emb.dim)
         stats = full_reindex(settings, embedder=emb)
         click.echo(f"indexed: units_written={stats['units_written']}")
@@ -270,7 +284,10 @@ def init(root: Path | None, embedder: str | None, no_watch: bool,
 
     click.echo("\nNext steps:")
     if not indexed:
-        click.echo("  - run `claude-repo-mem index` to build the index")
+        index_command = "claude-repo-mem index"
+        if embedder is not None or selected_embedder != "bge-small":
+            index_command += f" --embedder {selected_embedder}"
+        click.echo(f"  - run `{index_command}` to build the index")
     click.echo("  - restart Claude Code (or reload the workspace) to load the MCP server")
 
 

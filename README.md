@@ -78,7 +78,7 @@ claude-repo-mem install-hooks       # writes .git/hooks/post-commit
 ```text
 claude-repo-mem init  [--root PATH] [--embedder NAME] [--no-watch] [--index] [--hooks] [--force]
 claude-repo-mem index [--embedder NAME] [--no-embed] [--reset]
-claude-repo-mem serve [--watch | --no-watch]
+claude-repo-mem serve [--watch | --no-watch] [--embedder NAME]
 claude-repo-mem doctor                              # layer counts, T2 coverage, counters
 claude-repo-mem install-hooks [--force]             # git post-commit reindex
 claude-repo-mem distill [--yes] [--transcript PATH] # extract durable memories from a transcript

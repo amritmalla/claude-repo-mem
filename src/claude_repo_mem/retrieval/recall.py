@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import re
+from contextlib import closing
 from typing import Optional, Sequence
 
 from ..config import Settings
 from ..db.connection import connect
 from ..db.repository import Repository
 from ..embeddings.base import Embedder
+from ..embeddings.validation import validate_embedder
 from ..units.model import Unit
 from .fill import FillResult, budget_fill
 from .ranker import rrf_then_rerank
@@ -26,20 +28,16 @@ def recall(
     layers: Optional[Sequence[str]] = None,
     include_superseded: bool = False,
 ) -> FillResult:
-    conn = connect(settings.db_path)
-    repo = Repository(conn)
-
-    # FTS query: simple word-tokenized, OR'd.
-    fts_query = " OR ".join(_fts_tokens(query)) or query
-    bm25_hits = repo.fts_search(fts_query, limit=TOP_K)
-
-    # Vector query.
-    [qvec] = embedder.embed([query])
-    vec_hits = repo.vec_search(qvec, limit=TOP_K)
-
-    # Fetch units for the union of ids.
-    all_ids = {h.id for h in bm25_hits} | {h.id for h in vec_hits}
-    units = repo.get_units(list(all_ids))
+    with closing(connect(settings.db_path)) as conn:
+        validate_embedder(conn, embedder)
+        repo = Repository(conn)
+        # FTS query: simple word-tokenized, OR'd.
+        fts_query = " OR ".join(_fts_tokens(query)) or query
+        bm25_hits = repo.fts_search(fts_query, limit=TOP_K)
+        [qvec] = embedder.embed([query])
+        vec_hits = repo.vec_search(qvec, limit=TOP_K)
+        all_ids = {h.id for h in bm25_hits} | {h.id for h in vec_hits}
+        units = repo.get_units(list(all_ids))
 
     # Optional layer/scope filtering (pre-rank, hard).
     if layers:

@@ -21,7 +21,14 @@ def tool_schema() -> Tool:
             "type": "object",
             "properties": {
                 "fact": {"type": "string", "description": "The text to remember"},
-                "scope": {"type": "string", "description": "Scope, e.g. 'backend/auth'"},
+                "scope": {
+                    "type": "string",
+                    "description": (
+                        "Relative '/'-separated scope, e.g. 'backend/auth'. "
+                        "Absolute paths, '.', '..', backslashes, colons, control "
+                        "characters, empty components, and trailing dots/spaces are invalid."
+                    ),
+                },
                 "kind": {
                     "type": "string",
                     "enum": ["fact", "decision", "preference", "convention"],

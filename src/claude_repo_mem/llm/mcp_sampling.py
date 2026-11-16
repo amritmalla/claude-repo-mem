@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from .base import LLMClient, LLMError
+from mcp.types import SamplingMessage, TextContent
+
+from .base import LLMError
 
 
 class McpSamplingClient:
@@ -21,26 +23,16 @@ class McpSamplingClient:
     ) -> str:
         try:
             result = await self.ctx.session.create_message(
-                messages=[{"role": "user", "content": user}],
+                messages=[SamplingMessage(role="user", content=TextContent(type="text", text=user))],
                 system_prompt=system,
                 max_tokens=max_tokens,
                 temperature=temperature,
             )
-        except TypeError:
-            try:
-                result = await self.ctx.session.create_message(
-                    messages=[{"role": "user", "content": user}],
-                    system=system,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                )
-            except Exception as e:
-                raise LLMError(f"MCP sampling failed: {e}") from e
         except Exception as e:
             raise LLMError(f"MCP sampling failed: {e}") from e
 
         content = getattr(result, "content", None) or []
-        for item in content:
+        for item in content if isinstance(content, list) else [content]:
             if getattr(item, "type", None) == "text":
                 return getattr(item, "text", "") or ""
         return ""

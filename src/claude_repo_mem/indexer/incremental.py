@@ -1,13 +1,24 @@
 from __future__ import annotations
 
+from contextlib import closing
 from pathlib import Path
+import re
 from typing import Iterable, Optional
+
+import numpy as np
 
 from ..config import Settings
 from ..db.connection import connect
 from ..db.repository import Repository
 from ..embeddings.base import Embedder
-from .orchestrator import _pick_parser, _relativize_scope
+from ..embeddings.validation import validate_embedder
+from ..memory.lifecycle import index_memory_unit, restore_supersession
+from ..units.model import Unit, Relation
+from .orchestrator import _pick_parser, _relativize_scope, _synthesize_graph
+from .walker import SUPPORTED_EXTS, walk_repo
+
+
+GRAPH_EXTS = {".py", ".js", ".jsx", ".ts", ".tsx"}
 
 
 def incremental_reindex(
@@ -15,76 +26,115 @@ def incremental_reindex(
     paths: Iterable[Path],
     embedder: Optional[Embedder] = None,
 ) -> dict:
-    """Re-parse only the given paths and upsert their units. Delete units whose
-    `source_ref` matches a path that no longer exists or whose ID is no longer
-    produced by the parser for that path.
+    """Reparse changed files and atomically refresh their units and code graph.
+
+    Graph synthesis rereads repository sources to reconnect unchanged importers
+    and cross-file route declarations, without reparsing unchanged files.
     """
-    conn = connect(settings.db_path)
-    repo = Repository(conn)
-    repo_root = settings.repo_root
-    files_processed = 0
-    new_unit_ids: set[str] = set()
+    paths = list(dict.fromkeys(p if p.is_absolute() else settings.repo_root / p for p in paths))
+    with closing(connect(settings.db_path)) as conn:
+        return _refresh(settings, Repository(conn), paths, embedder)
+
+
+def _refresh(settings: Settings, repo: Repository, paths: list[Path], embedder: Optional[Embedder]) -> dict:
+    if embedder is not None:
+        validate_embedder(repo.conn, embedder)
+    stored = repo.list_units()
+    stored_by_id = {u.id: u for u in stored}
+    processed: set[Path] = set()
+    parsed: list[Unit] = []
+    relations: list[Relation] = []
+    sources: dict[Path, str] = {}
 
     for path in paths:
-        files_processed += 1
-        path_posix = path.as_posix()
-        # Source refs may include `:line-range` suffixes (from code parsers).
-        # Match both exact and prefix-with-colon.
-        existing_ids = {
-            r["id"] for r in conn.execute(
-                "SELECT id FROM unit WHERE source_ref = ? OR source_ref LIKE ?",
-                (path_posix, path_posix + ":%"),
-            ).fetchall()
-        }
-
-        if not path.exists():
-            for uid in existing_ids:
-                _delete_unit(conn, uid)
-            conn.commit()
+        if path.suffix.lower() not in SUPPORTED_EXTS:
             continue
-
+        if not path.exists():
+            processed.add(path)
+            continue
         parser = _pick_parser(path)
         if parser is None:
             continue
-        try:
-            text = path.read_text(encoding="utf-8")
-        except (UnicodeDecodeError, OSError):
-            continue
-
+        text = _read_source(path)
         result = parser.parse(path, text)
-        produced_ids: set[str] = set()
-        new_units = [_relativize_scope(u, repo_root) for u in result.units]
-        for u in new_units:
-            produced_ids.add(u.id)
-            new_unit_ids.add(u.id)
+        processed.add(path)
+        sources[path] = text
+        parsed.extend(_relativize_scope(unit, settings.repo_root) for unit in result.units)
+        relations.extend(result.relations)
 
-        embeddings: dict = {}
-        if embedder is not None and new_units:
-            texts = [u.t1_header for u in new_units]
-            vecs = embedder.embed(texts)
-            embeddings = {u.id: v for u, v in zip(new_units, vecs)}
+    changed_ids = {u.id for u in stored if _source_path(u) in processed}
+    graph_changed = any(p.suffix.lower() not in {".md", ".markdown"} for p in processed)
+    generated: list[Unit] = []
+    retained: list[Unit] = []
+    route_updates: list[Unit] = []
+    if graph_changed:
+        retained = [u for u in stored if u.id not in changed_ids and not _is_route(u)]
+        for path in walk_repo(settings.repo_root, strict=True):
+            if path.suffix.lower() in GRAPH_EXTS and path not in sources:
+                sources[path] = _read_source(path)
+        generated, graph_relations = _synthesize_graph(retained + parsed, sources, settings.repo_root)
+        generated = [_relativize_scope(u, settings.repo_root) for u in generated]
+        relations.extend(graph_relations)
+        for unit in generated:
+            old = stored_by_id.get(unit.id)
+            # Keep untouched route summaries, timestamps, and vectors intact.
+            if old is None or _route_content(old) != _route_content(unit):
+                route_updates.append(unit)
 
-        for u in new_units:
-            repo.upsert_unit(u, embedding=embeddings.get(u.id))
-        for rel in result.relations:
-            repo.add_relation(rel)
+    embeddings: dict[str, np.ndarray] = {}
+    if embedder is not None:
+        vector_ids = {row[0] for row in repo.conn.execute("SELECT id FROM unit_vec")}
+        to_embed = parsed + [u for u in generated if u.id not in vector_ids]
+        vectors = embedder.embed([u.t1_header for u in to_embed]) if to_embed else []
+        embeddings = {u.id: vector for u, vector in zip(to_embed, vectors)}
+        updated_route_ids = {u.id for u in route_updates}
+        route_updates.extend(
+            stored_by_id[u.id] for u in generated
+            if u.id in embeddings and u.id not in updated_route_ids
+        )
 
-        stale = existing_ids - produced_ids
-        for uid in stale:
-            _delete_unit(conn, uid)
-        conn.commit()
+    written = parsed + route_updates
+    written_ids = {u.id for u in written}
+    with repo.transaction():
+        if graph_changed:
+            repo.prune_indexed_units(u.id for u in retained + parsed + generated)
+        for unit in written:
+            if unit.layer == "memory":
+                index_memory_unit(repo, unit, embedding=embeddings.get(unit.id))
+            else:
+                repo.upsert_unit(unit, embedding=embeddings.get(unit.id))
+        restore_supersession(repo, parsed)
+        # Code/docs were pruned with the graph; memory-only updates still need
+        # to remove old content-addressed handles after restoring supersession.
+        stale = changed_ids - written_ids
+        if graph_changed:
+            stale = {uid for uid in stale if stored_by_id[uid].layer not in {"code", "docs"}}
+        repo.delete_units(stale)
+        for relation in relations:
+            repo.add_relation(relation)
 
-    return {
-        "files_processed": files_processed,
-        "units_touched": len(new_unit_ids),
-    }
+    return {"files_processed": len(paths), "units_touched": len(written_ids)}
 
 
-def _delete_unit(conn, uid: str) -> None:
-    conn.execute("DELETE FROM relation WHERE src_id = ? OR dst_id = ?", (uid, uid))
-    conn.execute("DELETE FROM unit_fts WHERE id = ?", (uid,))
+def _read_source(path: Path) -> str:
     try:
-        conn.execute("DELETE FROM unit_vec WHERE id = ?", (uid,))
-    except Exception:
-        pass  # vec table may not exist or row absent
-    conn.execute("DELETE FROM unit WHERE id = ?", (uid,))
+        return path.read_text(encoding="utf-8")
+    except (UnicodeDecodeError, OSError) as exc:
+        raise ValueError(f"Cannot read {path}; incremental reindex aborted") from exc
+
+
+def _source_path(unit: Unit) -> Path | None:
+    if not unit.source_ref:
+        return None
+    reference = unit.source_ref
+    if unit.layer in {"code", "docs"}:
+        reference = re.sub(r":\d+-\d+$", "", reference)
+    return Path(reference)
+
+
+def _is_route(unit: Unit) -> bool:
+    return unit.layer == "code" and unit.kind == "route"
+
+
+def _route_content(unit: Unit) -> tuple:
+    return (unit.content_hash, unit.t1_header, unit.source_ref, unit.scope, unit.metadata)

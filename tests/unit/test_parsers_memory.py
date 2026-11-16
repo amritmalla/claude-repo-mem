@@ -2,6 +2,7 @@ from pathlib import Path
 import json
 import pytest
 from claude_repo_mem.indexer.parsers.memory_md import MemoryMarkdownParser
+from claude_repo_mem.memory.writer import TOMBSTONE_HANDLE
 
 
 SAMPLE = """\
@@ -58,3 +59,17 @@ def test_supports():
     assert p.supports(Path(".claude-repo-mem/memory/x/y.md"))
     assert not p.supports(Path("docs/readme.md"))
     assert not p.supports(Path("x.py"))
+
+
+@pytest.mark.parametrize("tombstoned", [True, False])
+def test_tombstone_flag_restored_without_changing_handle(tmp_path: Path, tombstoned):
+    path = tmp_path / "memory.md"
+    parser = MemoryMarkdownParser()
+    active = parser.parse(path, "---\nkind: fact\n---\n\nA memory\n").units[0]
+
+    parsed = parser.parse(
+        path, f"---\nkind: fact\ntombstoned: {str(tombstoned).lower()}\n---\n\nA memory\n",
+    ).units[0]
+
+    assert parsed.id == active.id
+    assert parsed.superseded_by == (TOMBSTONE_HANDLE if tombstoned else None)

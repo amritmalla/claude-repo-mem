@@ -23,7 +23,7 @@ def build_server_entry(
     else:
         args.append("--no-watch")
     args += ["--root", str(repo_root.resolve())]
-    if embedder and embedder != DEFAULT_EMBEDDER:
+    if embedder:
         args += ["--embedder", embedder]
     return {"command": command, "args": args}
 

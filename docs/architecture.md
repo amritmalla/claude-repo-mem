@@ -22,6 +22,13 @@ SQLite database of **units** (chunks of code, docs, memories, tasks) and
 The pipeline is orchestrated by `indexer/orchestrator.py` (full reindex) and
 `indexer/incremental.py` (incremental updates).
 
+A full reindex builds a snapshot before updating the database, then publishes it
+in one transaction. It removes code/docs units absent from the snapshot, including
+their lexical and vector entries, and rebuilds relationships between code/docs
+units. Memory and task units are retained; references to removed units are
+detached. Unreadable files or directories abort the full refresh, and failed
+writes roll back to the previous index.
+
 ### 1. Walker — `indexer/walker.py`
 
 Discovers candidate files under the repo root, applying ignore rules so build
@@ -43,6 +50,11 @@ tree-sitter based, one module per language:
 | `memory.md` | `memory_md.py` | durable memory entries |
 
 `parsers/base.py` defines the parser interface.
+
+Code parsers encode each file to UTF-8 once, apply tree-sitter byte offsets to
+that byte buffer, and decode extracted node text. This preserves non-ASCII
+identifiers and content in headers, source chunks, and content hashes while
+keeping source references based on tree-sitter line positions.
 
 ### 3. Synthesizers — `indexer/synthesizers/`
 
@@ -74,6 +86,16 @@ summarization catches up. `T0` is the full source/content.
   index for lexical search, and a vector table for embeddings.
 - `db/repository.py` — typed read/write access over the schema (`Repository`,
   `get_unit`, row mapping).
+
+Unit updates preserve an existing vector when the content hash and T1 header are
+unchanged. Supplied embeddings replace existing vectors; content/header changes
+without a replacement invalidate the old vector. This allows summary backfills
+and indexing without embeddings to retain vectors for unchanged content.
+
+Memory indexing restores `tombstoned: true` as inactive state and resolves
+`supersedes` claims after storing the parsed units. Existing inactive state is
+preserved when a watcher reparses a memory. The tombstone sentinel is also
+inactive, so it does not appear among ordinary recall results or active scopes.
 
 Units carry a **layer** — one of `memory`, `docs`, `code`, `task` (enforced by a
 schema `CHECK` constraint). Layers are how retrieval and the `tasks`/memory tools
@@ -110,7 +132,10 @@ Pluggable embedders behind `embeddings/base.py`, selected by
 | `voyage` | `voyage_emb.py` | requires `VOYAGE_API_KEY`, 512-dim |
 
 Selection is via the `CLAUDE_REPO_MEM_EMBEDDER` env var or the `--embedder` flag on
-`index`.
+`index` and `serve`. The server reuses the selected embedder for recall, loading
+the local model only when needed. Backend identity and vector dimensions are
+validated before embedding requests. `CLAUDE_REPO_MEM_EMBED` remains a fallback
+alias for older configurations.
 
 ## LLM backends — `llm/`
 
@@ -118,13 +143,23 @@ Summarization and `plan_task` need an LLM, selected by `llm/factory.py` via
 `CLAUDE_REPO_MEM_LLM`:
 
 - `mcp` (default) — `mcp_sampling.py`, asks the MCP host (Claude Code) to sample.
-  No API key needed; only works inside an MCP session.
+  `plan_task` supplies the active request context; the adapter sends typed
+  sampling messages and reads the host's response content. No separate API key
+  is needed; the host must support sampling.
 - `anthropic` — `anthropic_api.py`, direct Anthropic API; requires
   `ANTHROPIC_API_KEY`.
 
 ## Incremental updates and the watcher
 
-`indexer/incremental.py` re-indexes only changed files. When `serve --watch` is
+`indexer/incremental.py` reparses only changed files. For code changes it rereads
+repository code sources and rebuilds the relationship graph, reconnecting
+unchanged importers and cross-file route declarations to current handles. Units,
+search entries, and graph changes are published in one transaction; a read or
+write failure leaves the previous index intact. Unchanged generated routes retain
+their summaries, timestamps, and vectors. Memory/docs-only updates skip the graph
+scan.
+
+When `serve --watch` is
 on, a `watchdog`-based file watcher feeds changes through a debounced background
 queue (`queue/background.py`, 750ms) so the index tracks edits live. As an
 alternative to the watcher, `install-hooks` writes a git `post-commit` hook that

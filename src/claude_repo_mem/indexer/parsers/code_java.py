@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 from functools import lru_cache
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 from tree_sitter import Language, Parser
 import tree_sitter_java
@@ -33,10 +33,11 @@ class JavaParser:
         return path.suffix == ".java"
 
     def parse(self, path: Path, text: str) -> ParseResult:
-        tree = _parser().parse(text.encode("utf-8"))
+        source = text.encode("utf-8")
+        tree = _parser().parse(source)
         scope = _scope_from_path(path)
         units: List[Unit] = []
-        _walk(tree.root_node, text, path, scope, units, parent_id=None, class_name=None)
+        _walk(tree.root_node, source, path, scope, units, parent_id=None, class_name=None)
         return ParseResult(units=units)
 
 
@@ -49,15 +50,15 @@ def _scope_from_path(path: Path) -> str:
     return "/".join(parts) if parts else "root"
 
 
-def _text_of(node, source: str) -> str:
-    return source[node.start_byte : node.end_byte]
+def _text_of(node, source: bytes) -> str:
+    return source[node.start_byte : node.end_byte].decode("utf-8")
 
 
 def _line_range(node) -> tuple[int, int]:
     return (node.start_point[0] + 1, node.end_point[0] + 1)
 
 
-def _method_signature(node, source: str) -> str:
+def _method_signature(node, source: bytes) -> str:
     params_node = node.child_by_field_name("parameters")
     type_node = node.child_by_field_name("type")
     params = _text_of(params_node, source) if params_node else "()"
@@ -65,7 +66,7 @@ def _method_signature(node, source: str) -> str:
     return f"{params} -> {ret}"
 
 
-def _walk(node, source, path, scope, units, parent_id, class_name):
+def _walk(node, source: bytes, path, scope, units, parent_id, class_name):
     for child in node.children:
         t = child.type
         if t in ("class_declaration", "interface_declaration"):

@@ -33,10 +33,11 @@ class GoParser:
         return path.suffix == ".go"
 
     def parse(self, path: Path, text: str) -> ParseResult:
-        tree = _parser().parse(text.encode("utf-8"))
+        source = text.encode("utf-8")
+        tree = _parser().parse(source)
         scope = _scope_from_path(path)
         units: List[Unit] = []
-        _walk(tree.root_node, text, path, scope, units)
+        _walk(tree.root_node, source, path, scope, units)
         return ParseResult(units=units)
 
 
@@ -49,15 +50,15 @@ def _scope_from_path(path: Path) -> str:
     return "/".join(parts) if parts else "root"
 
 
-def _text_of(node, source: str) -> str:
-    return source[node.start_byte : node.end_byte]
+def _text_of(node, source: bytes) -> str:
+    return source[node.start_byte : node.end_byte].decode("utf-8")
 
 
 def _line_range(node) -> tuple[int, int]:
     return (node.start_point[0] + 1, node.end_point[0] + 1)
 
 
-def _walk(node, source, path, scope, units):
+def _walk(node, source: bytes, path, scope, units):
     for child in node.children:
         t = child.type
         if t == "function_declaration":

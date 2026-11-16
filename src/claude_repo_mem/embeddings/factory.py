@@ -3,11 +3,12 @@ from __future__ import annotations
 import os
 from typing import Optional
 
+from ..config import configured_embedder
 from .base import Embedder
 
 
 def make_embedder(name: Optional[str] = None) -> Embedder:
-    choice = (name or os.environ.get("CLAUDE_REPO_MEM_EMBEDDER", "bge-small")).lower()
+    choice = (name or configured_embedder()).lower()
     if choice == "bge-small":
         from .bge_small import BgeSmallEmbedder
         return BgeSmallEmbedder()

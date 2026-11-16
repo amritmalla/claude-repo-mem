@@ -15,29 +15,31 @@ SKIP_DIRS = {
 }
 
 
-def walk_repo(root: Path) -> Iterator[Path]:
-    """Yield absolute paths to indexable files under `root`."""
+def walk_repo(root: Path, *, strict: bool = False) -> Iterator[Path]:
+    """Yield indexable paths; strict mode aborts on unreadable directories."""
     root = root.resolve()
-    for path in _walk(root):
+    for path in _walk(root, strict=strict):
         if path.is_file() and path.suffix.lower() in SUPPORTED_EXTS:
             yield path
 
 
-def _walk(dirpath: Path) -> Iterator[Path]:
+def _walk(dirpath: Path, *, strict: bool = False) -> Iterator[Path]:
     try:
         entries = list(dirpath.iterdir())
     except (PermissionError, OSError):
+        if strict:
+            raise
         return
     for entry in entries:
         if entry.is_dir():
             if entry.name == ".claude-repo-mem":
                 mem = entry / "memory"
                 if mem.is_dir():
-                    yield from _walk(mem)
+                    yield from _walk(mem, strict=strict)
                 continue
             if entry.name in SKIP_DIRS:
                 continue
-            yield from _walk(entry)
+            yield from _walk(entry, strict=strict)
         else:
             yield entry
 

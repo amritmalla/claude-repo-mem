@@ -36,3 +36,13 @@ async def test_handle_invalid_kind_returns_error(settings):
     out = await handle(settings, {"fact": "x", "scope": "x", "kind": "bogus"})
     payload = json.loads(out[0].text)
     assert "error" in payload
+
+
+@pytest.mark.asyncio
+async def test_handle_invalid_scope_returns_error_without_writing(settings):
+    out = await handle(settings, {"fact": "Must stay inside memory", "scope": "../escaped"})
+    payload = json.loads(out[0].text)
+
+    assert "scope" in payload["error"]
+    assert not settings.memory_dir.exists()
+    assert not (settings.state_dir / "escaped").exists()

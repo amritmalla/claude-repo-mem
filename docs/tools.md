@@ -106,6 +106,11 @@ Tombstone a memory unit by handle. Marks the unit superseded and appends
 `tombstoned: true` to the markdown frontmatter — the file is **not** deleted. Use
 when a memory has become wrong or obsolete.
 
+Full and incremental indexing honor the saved tombstone marker, including when
+rebuilding the database from memory files. Supersession links from `remember`
+are also restored after the memory files have been loaded, regardless of file
+order. These memories remain available through `include_superseded: true`.
+
 | Parameter | Type | Default | Notes |
 |-----------|------|---------|-------|
 | `handle` | string | — | **Required.** |

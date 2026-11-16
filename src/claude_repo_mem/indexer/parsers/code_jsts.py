@@ -31,10 +31,11 @@ class JsTsParser:
         return path.suffix in (".js", ".jsx", ".ts", ".tsx")
 
     def parse(self, path: Path, text: str) -> ParseResult:
-        tree = _parser_for_suffix(path.suffix).parse(text.encode("utf-8"))
+        source = text.encode("utf-8")
+        tree = _parser_for_suffix(path.suffix).parse(source)
         scope = _scope_from_path(path)
         units: List[Unit] = []
-        _walk(tree.root_node, text, path, scope, units, parent_id=None, class_name=None)
+        _walk(tree.root_node, source, path, scope, units, parent_id=None, class_name=None)
         return ParseResult(units=units)
 
 
@@ -47,8 +48,8 @@ def _scope_from_path(path: Path) -> str:
     return "/".join(parts) if parts else "root"
 
 
-def _text(node, source: str) -> str:
-    return source[node.start_byte : node.end_byte]
+def _text(node, source: bytes) -> str:
+    return source[node.start_byte : node.end_byte].decode("utf-8")
 
 
 def _lines(node):
@@ -77,7 +78,7 @@ def _make_fn_unit(name: str, sig: str, body_text: str, path: Path, scope: str,
     )
 
 
-def _walk(node, source: str, path: Path, scope: str,
+def _walk(node, source: bytes, path: Path, scope: str,
           units: List[Unit], parent_id: Optional[str], class_name: Optional[str]) -> None:
     for child in node.children:
         t = child.type

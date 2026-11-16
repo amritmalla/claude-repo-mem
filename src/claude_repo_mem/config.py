@@ -7,6 +7,10 @@ from pathlib import Path
 STATE_DIRNAME = ".claude-repo-mem"
 
 
+def configured_embedder() -> str:
+    return os.environ.get("CLAUDE_REPO_MEM_EMBEDDER") or os.environ.get("CLAUDE_REPO_MEM_EMBED") or "bge-small"
+
+
 @dataclass(frozen=True)
 class Settings:
     repo_root: Path
@@ -67,5 +71,5 @@ class Settings:
             handoffs_dir=state / "handoffs",
             memory_dir=state / "memory",
             scopes_yml=state / "scopes.yml",
-            embedder=os.environ.get("CLAUDE_REPO_MEM_EMBED", "bge-small"),
+            embedder=configured_embedder(),
         )

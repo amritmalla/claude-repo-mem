@@ -11,6 +11,8 @@ from typing import Any
 from mcp.server import Server
 from mcp.types import Tool, TextContent
 
+from .config import Settings
+from .embeddings.base import Embedder
 from .tools import recall as recall_tool
 from .tools import trace as trace_tool
 from .tools import expand as expand_tool
@@ -35,8 +37,8 @@ connected nodes in one shot. Reach for native file tools only when claude-repo-m
 nothing useful, when working on files outside this repo, or when verifying a recent \
 edit not yet reindexed.
 
-For long or multi-part tasks, future versions will offer plan_task, remember, and \
-handoff. For now, prefer recall over Grep and trace over repeated expand.
+For multi-part tasks, use plan_task to create a task tree. Save durable decisions \
+with remember, and use handoff and resume to carry task state across sessions.
 """
 
 
@@ -47,6 +49,7 @@ def build_server(settings=None, embedder=None) -> Server:
     per call in _call so that build_server() works without a configured repo.
     """
     server = _construct_server()
+    resolved_embedder = embedder
 
     @server.list_tools()
     async def _list() -> list[Tool]:
@@ -66,13 +69,13 @@ def build_server(settings=None, embedder=None) -> Server:
 
     @server.call_tool()
     async def _call(name: str, arguments: dict[str, Any]) -> list[TextContent]:
-        from .config import Settings
-        from .embeddings.bge_small import BgeSmallEmbedder
-
+        nonlocal resolved_embedder
         s = settings or Settings.discover()
-        e = embedder or BgeSmallEmbedder()
         if name == "recall":
-            return await recall_tool.handle(s, e, arguments)
+            if resolved_embedder is None:
+                from .embeddings.factory import make_embedder
+                resolved_embedder = make_embedder(s.embedder)
+            return await recall_tool.handle(s, resolved_embedder, arguments)
         if name == "trace":
             return await trace_tool.handle(s, arguments)
         if name == "expand":
@@ -87,7 +90,7 @@ def build_server(settings=None, embedder=None) -> Server:
             return await stats_tool.handle(s, arguments)
         if name == "plan_task":
             from .llm.factory import make_llm_client
-            llm = make_llm_client(ctx=None)  # falls back appropriately; sampling Context wiring is a later refinement
+            llm = make_llm_client(ctx=server.request_context)
             return await plan_task_tool.handle(s, llm, arguments)
         if name == "tasks":
             return await tasks_tool.handle(s, arguments)
@@ -117,9 +120,10 @@ def _construct_server() -> Server:
         return s
 
 
-async def serve_stdio() -> None:
+async def serve_stdio(settings: Settings | None = None, embedder: Embedder | None = None) -> None:
+    """Run stdio requests against the repository selected at startup."""
     from mcp.server.stdio import stdio_server
 
-    server = build_server()
+    server = build_server(settings=settings, embedder=embedder)
     async with stdio_server() as (reader, writer):
         await server.run(reader, writer, server.create_initialization_options())

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import yaml
 
+from ...memory.lifecycle import TOMBSTONE_HANDLE
 from ...units.headers import t1_header
 from ...units.ids import make_handle
 from ...units.model import Unit
@@ -68,6 +69,7 @@ class MemoryMarkdownParser:
             created_at=now(),
             last_seen_at=now(),
             confidence=confidence,
+            superseded_by=TOMBSTONE_HANDLE if front.get("tombstoned") is True else None,
             metadata=json.dumps(metadata),
         )
         return ParseResult(units=[unit])

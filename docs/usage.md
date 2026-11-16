@@ -26,6 +26,11 @@ claude-repo-mem doctor      # verify: units, by_layer, T2 coverage, counters
 index. The first run downloads the local embedding model (`bge-small`, ~90MB);
 later runs reuse it.
 
+Later full indexes remove obsolete code and documentation from search after
+edits, renames, or deletions, while retaining saved memories and task snapshots.
+If a file or directory cannot be read, the refresh aborts and the previous index
+remains available. Resolve the read error and run `index` again.
+
 `doctor` is your health check — it prints the repo root it resolved, the database
 path, unit and relation counts, the per-layer breakdown, T2 (summary) coverage,
 and tool-call counters.
@@ -35,9 +40,14 @@ and tool-call counters.
 | Flag | Effect |
 |------|--------|
 | `--reset` | Rebuild from scratch, discarding the existing index. |
-| `--no-embed` | Index lexical/structure only, skip embeddings (faster; FTS-only recall). |
+| `--no-embed` | Skip generating embeddings; retain existing vectors for unchanged content. |
 | `--embedder NAME` | Pick the embedding backend for this run. |
 | `--root DIR` | Index a repo other than the current directory. |
+
+Watcher updates and the post-commit hook skip embedding generation. They retain
+vectors for unchanged units, while new or changed units remain searchable by
+their lexical entries. Run `claude-repo-mem index` without `--no-embed` to generate
+vectors for that content. Summary-only updates also preserve existing vectors.
 
 ## `init` — one-step setup
 
@@ -164,7 +174,11 @@ launch).
 
 ### Embedding backend
 
-Selected by `CLAUDE_REPO_MEM_EMBEDDER` (or the `--embedder` flag on `index`):
+Selected by `CLAUDE_REPO_MEM_EMBEDDER` or the `--embedder` flag on `index` and
+`serve`. The legacy `CLAUDE_REPO_MEM_EMBED` variable is accepted when the canonical
+variable is absent. An explicit flag takes precedence over both variables.
+`init` pins its selected backend into the generated server configuration and
+prints the matching first-index command.
 
 | Value | Model | Requirement |
 |-------|-------|-------------|
@@ -175,6 +189,11 @@ Selected by `CLAUDE_REPO_MEM_EMBEDDER` (or the `--embedder` flag on `index`):
 > Changing the embedder changes the vector space. Re-index with `--reset` after
 > switching backends.
 
+Serving, recall, and incremental embedding updates validate the backend name and
+vector dimensions against the index before requesting embeddings. A lexical-only
+index with no existing embeddings can adopt its first backend without `--reset`;
+indexing with `--no-embed` preserves the existing vector dimensions.
+
 ### LLM backend
 
 Summarization (T2) and `plan_task` need an LLM, selected by `CLAUDE_REPO_MEM_LLM`:
@@ -184,9 +203,10 @@ Summarization (T2) and `plan_task` need an LLM, selected by `CLAUDE_REPO_MEM_LLM
 | `mcp` (default) | MCP host sampling (Claude Code does the inference) | runs inside an MCP session |
 | `anthropic` | Direct Anthropic API | `ANTHROPIC_API_KEY` |
 
-With the default `mcp` backend there is no API key and no extra cost — the host
-model performs summarization. Use `anthropic` when running the CLI outside an MCP
-session (e.g. summarizing during a plain `index` run).
+The default `mcp` backend uses the active request's MCP session and requires a
+host that supports sampling. It needs no separate Anthropic API key; availability
+and usage charges depend on the host. Use `anthropic` for the `distill` CLI outside
+an MCP session. A plain `index` run does not request LLM summaries.
 
 ### Scopes
 

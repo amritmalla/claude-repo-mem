@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import sqlite3
-import struct
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Iterable, List, Optional, Sequence
+from typing import Iterable, Iterator, List, Optional, Sequence
+from uuid import uuid4
 
 import numpy as np
 
@@ -30,10 +31,37 @@ class Repository:
     def __init__(self, conn: sqlite3.Connection) -> None:
         self.conn = conn
 
+    @contextmanager
+    def transaction(self) -> Iterator[None]:
+        """Group writes atomically, including calls to other repository methods."""
+        savepoint = f"repo_{uuid4().hex}"
+        self.conn.execute(f"SAVEPOINT {savepoint}")
+        try:
+            yield
+        except BaseException:
+            self.conn.execute(f"ROLLBACK TO SAVEPOINT {savepoint}")
+            self.conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+            raise
+        else:
+            self.conn.execute(f"RELEASE SAVEPOINT {savepoint}")
+
     # -- units --------------------------------------------------------------
 
     def upsert_unit(self, u: Unit, embedding: Optional[np.ndarray] = None) -> None:
-        with self.conn:
+        """Update a unit, preserving its vector when its content/header match.
+
+        A supplied vector replaces the old one. Without one, content or header
+        changes invalidate the old vector until embeddings are regenerated.
+        """
+        with self.transaction():
+            previous = self.conn.execute(
+                "SELECT content_hash, t1_header FROM unit WHERE id = ?", (u.id,),
+            ).fetchone()
+            content_changed = (
+                previous is None
+                or previous["content_hash"] != u.content_hash
+                or previous["t1_header"] != u.t1_header
+            )
             self.conn.execute(
                 """
                 INSERT INTO unit (id, layer, kind, scope, source_ref, content_hash,
@@ -66,8 +94,9 @@ class Repository:
                 "INSERT INTO unit_fts(id, t1_header, t2_summary) VALUES (?, ?, ?)",
                 (u.id, u.t1_header, u.t2_summary or ""),
             )
-            # Vector mirror.
-            self.conn.execute("DELETE FROM unit_vec WHERE id = ?", (u.id,))
+            # Metadata-only updates must not erase an existing embedding.
+            if embedding is not None or content_changed:
+                self.conn.execute("DELETE FROM unit_vec WHERE id = ?", (u.id,))
             if embedding is not None:
                 self.conn.execute(
                     "INSERT INTO unit_vec(id, embedding) VALUES (?, ?)",
@@ -80,6 +109,9 @@ class Repository:
             return None
         return _row_to_unit(row)
 
+    def list_units(self) -> List[Unit]:
+        return [_row_to_unit(row) for row in self.conn.execute("SELECT * FROM unit")]
+
     def get_units(self, ids: Sequence[str]) -> List[Unit]:
         if not ids:
             return []
@@ -91,10 +123,51 @@ class Repository:
         return [by_id[i] for i in ids if i in by_id]
 
     def delete_unit(self, unit_id: str) -> None:
-        with self.conn:
-            self.conn.execute("DELETE FROM unit_fts WHERE id = ?", (unit_id,))
-            self.conn.execute("DELETE FROM unit_vec WHERE id = ?", (unit_id,))
-            self.conn.execute("DELETE FROM unit WHERE id = ?", (unit_id,))
+        self.delete_units([unit_id])
+
+    def delete_units(self, unit_ids: Iterable[str]) -> int:
+        """Remove units and search entries, detaching references from survivors."""
+        with self.transaction():
+            self.conn.execute("CREATE TEMP TABLE deleted_unit_ids (id TEXT PRIMARY KEY)")
+            self.conn.executemany(
+                "INSERT OR IGNORE INTO deleted_unit_ids(id) VALUES (?)",
+                ((uid,) for uid in unit_ids),
+            )
+            ids = "SELECT id FROM deleted_unit_ids"
+            count = self.conn.execute(f"SELECT COUNT(*) FROM unit WHERE id IN ({ids})").fetchone()[0]
+            self.conn.execute(f"UPDATE unit SET parent_id = NULL WHERE parent_id IN ({ids})")
+            self.conn.execute(f"UPDATE unit SET superseded_by = NULL WHERE superseded_by IN ({ids})")
+            self.conn.execute(f"DELETE FROM unit_fts WHERE id IN ({ids})")
+            self.conn.execute(f"DELETE FROM unit_vec WHERE id IN ({ids})")
+            self.conn.execute(f"DELETE FROM unit WHERE id IN ({ids})")
+            self.conn.execute("DROP TABLE deleted_unit_ids")
+        return count
+
+    def prune_indexed_units(self, current_ids: Iterable[str]) -> int:
+        """Prune obsolete code/docs and reset their graph for a full refresh.
+
+        Durable memory/task units and cross-layer edges between surviving units
+        remain. References to removed units are detached to preserve valid FKs.
+        A temporary ID table avoids SQLite parameter limits on large indexes.
+        """
+        with self.transaction():
+            self.conn.execute("CREATE TEMP TABLE reindex_current (id TEXT PRIMARY KEY)")
+            self.conn.executemany(
+                "INSERT OR IGNORE INTO reindex_current(id) VALUES (?)",
+                ((uid,) for uid in current_ids),
+            )
+            stale_ids = (
+                "SELECT id FROM unit WHERE layer IN ('code','docs') "
+                "AND id NOT IN (SELECT id FROM reindex_current)"
+            )
+            self.conn.execute(
+                "DELETE FROM relation "
+                "WHERE src_id IN (SELECT id FROM unit WHERE layer IN ('code','docs')) "
+                "AND dst_id IN (SELECT id FROM unit WHERE layer IN ('code','docs'))"
+            )
+            count = self.delete_units(row[0] for row in self.conn.execute(stale_ids))
+            self.conn.execute("DROP TABLE reindex_current")
+        return count
 
     # -- search -------------------------------------------------------------
 
@@ -128,7 +201,7 @@ class Repository:
     # -- relations ----------------------------------------------------------
 
     def add_relation(self, r: Relation) -> None:
-        with self.conn:
+        with self.transaction():
             self.conn.execute(
                 "INSERT OR IGNORE INTO relation(src_id, dst_id, kind) VALUES (?, ?, ?)",
                 (r.src_id, r.dst_id, r.kind),
